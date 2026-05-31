@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "SafeFall AI",
+    "slug": "safefall-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.safefall.ai",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "SafeFall AI needs constant Bluetooth access to monitor fall data and sensor telemetry from your smartwatch device.",
+        "NSBluetoothPeripheralUsageDescription": "SafeFall AI connects to your smartwatch using Bluetooth to detect falls in real-time.",
+        "NSLocationWhenInUseUsageDescription": "SafeFall AI uses location services to find your address during fall alerts and share emergency location with contacts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SafeFall AI monitors location continuously in the background to ensure that if a fall occurs, the exact coordinates can be sent immediately to caregivers.",
+        "UIBackgroundModes": [
+          "bluetooth-central",
+          "location",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.safefall.ai",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_ADVERTISE",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Allow SafeFall AI to access location services in the background to send help when a fall is detected."
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "scheme": "safefall"
+  }
+}

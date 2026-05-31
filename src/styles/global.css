@@ -1,0 +1,10 @@
+/* Global Styles for NativeWind/Tailwind integration */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom theme utility overrides */
+body {
+  margin: 0;
+  padding: 0;
+}
