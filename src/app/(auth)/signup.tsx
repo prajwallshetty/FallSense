@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { firebaseService } from '../../services/firebase';
@@ -49,55 +49,59 @@ export default function SignupScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-900 px-6 justify-center">
+    <ScrollView contentContainerStyle={styles.scrollContent} style={styles.container}>
       {/* Back button */}
       <Pressable 
         onPress={() => router.back()} 
-        className="flex-row items-center mt-12 mb-4 self-start"
+        style={styles.backButton}
       >
-        <ChevronLeft size={20} className="text-slate-400 mr-1" />
-        <Text className="text-sm font-semibold text-slate-400">Back to Login</Text>
+        <ChevronLeft size={20} color="#94A3B8" style={{ marginRight: 4 }} />
+        <Text style={styles.backButtonText}>Back to Login</Text>
       </Pressable>
 
-      <View className="mb-6">
-        <Text className="text-2xl font-extrabold text-white">Create Account</Text>
-        <Text className="text-sm text-slate-400 mt-1">Get started with elder fall monitoring</Text>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Create Account</Text>
+        <Text style={styles.headerSubtitle}>Get started with elder fall monitoring</Text>
       </View>
 
       {/* Account Type Selector */}
-      <Text className="text-sm font-semibold text-slate-400 mb-2 ml-1">Select Account Type</Text>
-      <View className="flex-row gap-3 mb-5">
+      <Text style={styles.sectionLabel}>Select Account Type</Text>
+      <View style={styles.roleContainer}>
         <Pressable
           onPress={() => setRole('elderly')}
-          className={`flex-1 p-4 rounded-2xl border flex-row items-center justify-center ${
-            role === 'elderly' 
-              ? 'bg-teal-600/10 border-teal-500' 
-              : 'bg-slate-800/40 border-slate-700/30'
-          }`}
+          style={[
+            styles.roleBox,
+            role === 'elderly' ? styles.roleBoxActive : styles.roleBoxInactive
+          ]}
         >
-          <User size={18} className={role === 'elderly' ? 'text-teal-400' : 'text-slate-400'} />
-          <Text className={`text-sm font-bold ml-2 ${role === 'elderly' ? 'text-teal-400' : 'text-slate-400'}`}>
+          <User size={18} color={role === 'elderly' ? '#2DD4BF' : '#94A3B8'} />
+          <Text style={[
+            styles.roleText,
+            role === 'elderly' ? styles.roleTextActive : styles.roleTextInactive
+          ]}>
             Elderly User
           </Text>
         </Pressable>
 
         <Pressable
           onPress={() => setRole('caregiver')}
-          className={`flex-1 p-4 rounded-2xl border flex-row items-center justify-center ${
-            role === 'caregiver' 
-              ? 'bg-teal-600/10 border-teal-500' 
-              : 'bg-slate-800/40 border-slate-700/30'
-          }`}
+          style={[
+            styles.roleBox,
+            role === 'caregiver' ? styles.roleBoxActive : styles.roleBoxInactive
+          ]}
         >
-          <Users size={18} className={role === 'caregiver' ? 'text-teal-400' : 'text-slate-400'} />
-          <Text className={`text-sm font-bold ml-2 ${role === 'caregiver' ? 'text-teal-400' : 'text-slate-400'}`}>
+          <Users size={18} color={role === 'caregiver' ? '#2DD4BF' : '#94A3B8'} />
+          <Text style={[
+            styles.roleText,
+            role === 'caregiver' ? styles.roleTextActive : styles.roleTextInactive
+          ]}>
             Caregiver
           </Text>
         </Pressable>
       </View>
 
       {/* Registration Details */}
-      <View className="bg-slate-800/40 border border-slate-700/30 p-6 rounded-3xl mb-8">
+      <View style={styles.formContainer}>
         <Input
           label="Full Name"
           placeholder="e.g. Margaret Thompson"
@@ -141,9 +145,98 @@ export default function SignupScreen() {
           isLoading={isLoading}
           variant="primary"
           size="lg"
-          className="w-full mt-2"
+          style={styles.submitBtn}
         />
       </View>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: '#0F172A', // slate-900
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 48,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8', // slate-400
+  },
+  header: {
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8', // slate-400
+    marginTop: 4,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  roleContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  roleBox: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBoxActive: {
+    backgroundColor: 'rgba(13,148,136,0.1)', // teal-600/10
+    borderColor: '#14B8A6', // teal-500
+  },
+  roleBoxInactive: {
+    backgroundColor: 'rgba(30,41,59,0.4)', // slate-800/40
+    borderColor: 'rgba(51,65,85,0.3)', // slate-700/30
+  },
+  roleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  roleTextActive: {
+    color: '#2DD4BF', // teal-400
+  },
+  roleTextInactive: {
+    color: '#94A3B8', // slate-400
+  },
+  formContainer: {
+    backgroundColor: 'rgba(30,41,59,0.4)', // slate-800/40
+    borderColor: 'rgba(51,65,85,0.3)', // slate-700/30
+    borderWidth: 1,
+    padding: 24,
+    borderRadius: 24,
+    marginBottom: 32,
+  },
+  submitBtn: {
+    width: '100%',
+    marginTop: 8,
+  },
+});

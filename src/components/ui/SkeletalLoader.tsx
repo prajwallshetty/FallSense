@@ -1,18 +1,18 @@
 import React, { useEffect } from 'react';
-import { View, Animated } from 'react-native';
+import { View, Animated, ViewStyle } from 'react-native';
 
 interface SkeletalLoaderProps {
   width?: number | string;
   height?: number | string;
   borderRadius?: number;
-  className?: string;
+  style?: ViewStyle;
 }
 
 export const SkeletalLoader: React.FC<SkeletalLoaderProps> = ({
   width = '100%',
   height = 20,
   borderRadius = 8,
-  className = '',
+  style,
 }) => {
   const pulseAnim = new Animated.Value(0.3);
 
@@ -38,13 +38,23 @@ export const SkeletalLoader: React.FC<SkeletalLoaderProps> = ({
 
   return (
     <Animated.View
-      style={{
-        width: width as any,
-        height: height as any,
-        borderRadius,
-        opacity: pulseAnim,
-      }}
-      className={`bg-slate-200 dark:bg-slate-800 ${className}`}
+      style={[
+        {
+          width: width as any,
+          height: height as any,
+          borderRadius,
+          opacity: pulseAnim,
+        },
+        styles.loader,
+        style,
+      ]}
     />
   );
 };
+
+import { StyleSheet } from 'react-native';
+const styles = StyleSheet.create({
+  loader: {
+    backgroundColor: '#1E293B', // dark:bg-slate-800 equivalent
+  },
+});

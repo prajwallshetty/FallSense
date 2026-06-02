@@ -27,7 +27,7 @@ export const BatteryRing: React.FC<BatteryRingProps> = ({
   const colors = getBatteryColors();
 
   return (
-    <View className="items-center justify-center" style={{ width: size, height: size }}>
+    <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
         <Defs>
           <LinearGradient id="batteryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -62,14 +62,39 @@ export const BatteryRing: React.FC<BatteryRingProps> = ({
       </Svg>
 
       {/* Inner Label */}
-      <View className="absolute items-center justify-center">
-        <Text className="text-3xl font-extrabold text-slate-800 dark:text-white">
+      <View style={styles.innerLabelContainer}>
+        <Text style={styles.percentageText}>
           {percentage}%
         </Text>
-        <Text className="text-xxs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <Text style={styles.batteryText}>
           Battery
         </Text>
       </View>
     </View>
   );
 };
+
+import { StyleSheet } from 'react-native';
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  innerLabelContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  percentageText: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  batteryText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#64748B',
+  },
+});

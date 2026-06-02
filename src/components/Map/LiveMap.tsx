@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, Linking, Platform } from 'react-native';
-import Svg, { Circle, Path, Marker, Line } from 'react-native-svg';
+import { View, Text, Linking, Platform, StyleSheet } from 'react-native';
+import Svg, { Circle, Path, Line } from 'react-native-svg';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { MapPin, Navigation, Map as MapIcon, History } from 'lucide-react-native';
+import { MapPin, Map as MapIcon } from 'lucide-react-native';
 
 interface LiveMapProps {
   latitude: number;
@@ -27,26 +27,28 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       default: `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`,
     });
 
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          // Open web maps
-          Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
-        }
-      })
-      .catch((err) => console.error('Error opening maps', err));
+    if (url) {
+      Linking.canOpenURL(url)
+        .then((supported) => {
+          if (supported) {
+            Linking.openURL(url);
+          } else {
+            // Open web maps
+            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+          }
+        })
+        .catch((err) => console.error('Error opening maps', err));
+    }
   };
 
   return (
-    <Card className="mb-4 overflow-hidden p-0 border-slate-100 dark:border-slate-800">
+    <Card style={styles.cardContainer}>
       
       {/* Visual Map Canvas Mockup */}
-      <View className="h-64 bg-teal-50/40 dark:bg-slate-950/80 items-center justify-center relative overflow-hidden">
+      <View style={styles.mapCanvas}>
         
         {/* Background Map Contours (SVG) */}
-        <Svg width="100%" height="100%" className="absolute opacity-20 dark:opacity-10">
+        <Svg width="100%" height="100%" style={styles.svgOverlay}>
           <Path
             d="M-50,80 Q50,60 150,110 T350,70 T550,120 M120,-20 L150,280 M280,-20 L240,280 M-20,180 L480,150"
             stroke="#0D9488"
@@ -63,7 +65,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
         {/* Historical fall trace lines */}
         {history.length > 0 && (
-          <Svg width="100%" height="100%" className="absolute">
+          <Svg width="100%" height="100%" style={styles.svgOverlay}>
             {/* Draw lines linking history */}
             <Line x1="100" y1="180" x2="160" y2="120" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="4 4" />
             <Line x1="160" y1="120" x2="200" y2="128" stroke="#0D9488" strokeWidth={2} />
@@ -75,61 +77,197 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         )}
 
         {/* Live Patient Pulse Anchor */}
-        <View className="absolute items-center justify-center">
+        <View style={styles.centerAnchor}>
           {/* Animated pulse ring */}
-          <View className="absolute w-12 h-12 rounded-full bg-teal-500/20 animate-ping border border-teal-500/50" />
-          <View className="absolute w-6 h-6 rounded-full bg-teal-500/30" />
+          <View style={styles.pulseOuter} />
+          <View style={styles.pulseInner} />
           
-          <View className="w-4 h-4 rounded-full bg-teal-600 border-2 border-white items-center justify-center shadow-md">
-            <View className="w-1.5 h-1.5 rounded-full bg-white" />
+          <View style={styles.pulseDot}>
+            <View style={styles.pulseDotInner} />
           </View>
         </View>
 
         {/* Float Map Icon Tag */}
-        <View className="absolute top-3 left-3 bg-white/95 dark:bg-slate-900/95 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-800 flex-row items-center shadow-sm">
-          <MapIcon size={14} className="text-teal-600 mr-1.5" />
-          <Text className="text-xxs font-extrabold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+        <View style={styles.floatTagLeft}>
+          <MapIcon size={14} color="#0D9488" style={{ marginRight: 6 }} />
+          <Text style={styles.floatTagText}>
             GPS Live Monitor
           </Text>
         </View>
         
         {/* Battery warning or signal indicator float right */}
-        <View className="absolute top-3 right-3 bg-teal-500/10 dark:bg-teal-500/20 px-3 py-1.5 rounded-full border border-teal-500/20 flex-row items-center">
-          <View className="w-1.5 h-1.5 bg-teal-500 rounded-full mr-1.5" />
-          <Text className="text-xxs font-extrabold uppercase tracking-wide text-teal-600 dark:text-teal-400">
+        <View style={styles.floatTagRight}>
+          <View style={styles.signalDot} />
+          <Text style={styles.signalText}>
             Signal Locked
           </Text>
         </View>
       </View>
 
       {/* Address & Navigation Details */}
-      <View className="p-4 bg-white dark:bg-slate-900">
-        <View className="flex-row items-start mb-4">
-          <MapPin size={22} className="text-red-500 mr-2.5 mt-0.5" />
-          <View className="flex-1">
-            <Text className="text-sm font-bold text-slate-800 dark:text-white mb-0.5">
+      <View style={styles.detailsContainer}>
+        <View style={styles.addressRow}>
+          <MapPin size={22} color="#EF4444" style={{ marginRight: 10, marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.addressTitle}>
               Current Registered Location
             </Text>
-            <Text className="text-xs text-slate-500 dark:text-slate-400 leading-4">
+            <Text style={styles.addressValue}>
               {address}
             </Text>
-            <Text className="text-xxs text-slate-400 dark:text-slate-500 mt-1 font-semibold">
+            <Text style={styles.coordsValue}>
               Lat: {latitude.toFixed(6)}, Lng: {longitude.toFixed(6)}
             </Text>
           </View>
         </View>
 
         {/* Buttons */}
-        <View className="flex-row gap-3">
+        <View style={styles.buttonRow}>
           <Button
             title="Dispatch Navigation"
             onPress={openExternalNavigation}
             variant="primary"
             size="md"
-            className="flex-1"
+            style={{ flex: 1 }}
           />
         </View>
       </View>
     </Card>
   );
 };
+
+const styles = StyleSheet.create({
+  cardContainer: {
+    marginBottom: 16,
+    padding: 0,
+    overflow: 'hidden',
+    borderColor: '#1E293B',
+    borderWidth: 1,
+  },
+  mapCanvas: {
+    height: 256,
+    backgroundColor: 'rgba(2,6,23,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  svgOverlay: {
+    position: 'absolute',
+    opacity: 0.15,
+  },
+  centerAnchor: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseOuter: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(20,184,166,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(20,184,166,0.5)',
+  },
+  pulseInner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(20,184,166,0.3)',
+  },
+  pulseDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#0D9488',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseDotInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  floatTagLeft: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(15,23,42,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  floatTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#E2E8F0',
+  },
+  floatTagRight: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(20,184,166,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(20,184,166,0.3)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  signalDot: {
+    width: 6,
+    height: 6,
+    backgroundColor: '#14B8A6',
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  signalText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#2DD4BF',
+  },
+  detailsContainer: {
+    padding: 16,
+    backgroundColor: '#0F172A',
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  addressTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  addressValue: {
+    fontSize: 12,
+    color: '#94A3B8',
+    lineHeight: 16,
+  },
+  coordsValue: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+});

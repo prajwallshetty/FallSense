@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Dimensions } from 'react-native';
+import { View, Text, Dimensions, StyleSheet } from 'react-native';
 import Svg, { Rect, Path, Circle, Defs, LinearGradient, Stop, Line } from 'react-native-svg';
 
 interface DataPoint {
@@ -66,16 +66,12 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
           />
           {/* Label under x-axis */}
           <Text
-            style={{
+            style={[styles.axisLabel, {
               position: 'absolute',
               left: x + (barWidth - 40) / 2,
               top: chartHeight - 20,
               width: 40,
-              textAlign: 'center',
-              fontSize: 10,
-              fontWeight: 'bold',
-            }}
-            className="text-slate-400 dark:text-slate-500"
+            }]}
           >
             {item.label}
           </Text>
@@ -129,16 +125,12 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
           <React.Fragment key={idx}>
             <Circle cx={pt.x} cy={pt.y} r={4} fill="#0D9488" stroke="#FFFFFF" strokeWidth={1.5} />
             <Text
-              style={{
+              style={[styles.axisLabel, {
                 position: 'absolute',
                 left: pt.x - 20,
                 top: chartHeight - 20,
                 width: 40,
-                textAlign: 'center',
-                fontSize: 10,
-                fontWeight: 'bold',
-              }}
-              className="text-slate-400 dark:text-slate-500"
+              }]}
             >
               {pt.label}
             </Text>
@@ -152,16 +144,16 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
   const yTicks = [0, 0.5, 1];
 
   return (
-    <View className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl shadow-sm mb-4">
+    <View style={styles.cardContainer}>
       {/* Title */}
-      <View className="mb-4">
-        <Text className="text-base font-bold text-slate-800 dark:text-white">{title}</Text>
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>{title}</Text>
         {subtitle ? (
-          <Text className="text-xs text-slate-400 dark:text-slate-500">{subtitle}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         ) : null}
       </View>
 
-      <View style={{ height: chartHeight, width: screenWidth }} className="relative">
+      <View style={{ height: chartHeight, width: screenWidth }}>
         <Svg width={screenWidth} height={chartHeight}>
           <Defs>
             <LinearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -178,7 +170,6 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
           {/* Grid Lines & Y Labels */}
           {yTicks.map((tick, idx) => {
             const y = paddingTop + graphHeight * (1 - tick);
-            const valLabel = Math.round(tick * maxValue);
             return (
               <React.Fragment key={idx}>
                 <Line
@@ -211,16 +202,13 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
           return (
             <Text
               key={idx}
-              style={{
+              style={[styles.axisLabel, {
                 position: 'absolute',
                 left: 0,
                 top: y - 7,
                 width: paddingLeft - 8,
                 textAlign: 'right',
-                fontSize: 9,
-                fontWeight: 'bold',
-              }}
-              className="text-slate-400 dark:text-slate-500"
+              }]}
             >
               {valLabel >= 1000 ? `${(valLabel / 1000).toFixed(1)}k` : valLabel}
             </Text>
@@ -233,3 +221,32 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  cardContainer: {
+    backgroundColor: 'rgba(30,41,59,0.4)',
+    borderColor: 'rgba(51,65,85,0.3)',
+    borderWidth: 1,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  titleContainer: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  axisLabel: {
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+});

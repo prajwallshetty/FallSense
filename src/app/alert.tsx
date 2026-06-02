@@ -1,15 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, Animated, Alert } from 'react-native';
+import { View, Text, Animated, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAlertStore } from '../store/alertStore';
 import { useAuthStore } from '../store/authStore';
 import { notificationService } from '../services/notificationService';
 import { Button } from '../components/ui/Button';
-import { ShieldAlert, MapPin, BellRing, Volume2, VolumeX } from 'lucide-react-native';
+import { ShieldAlert, MapPin, BellRing } from 'lucide-react-native';
 
 export default function AlertScreen() {
   const router = useRouter();
-  const { activeAlert, countdown, isTimerActive, cancelAlert, acknowledgeAlert } = useAlertStore();
+  const { activeAlert, countdown, cancelAlert, acknowledgeAlert } = useAlertStore();
   const { user } = useAuthStore();
 
   const flashAnim = useRef(new Animated.Value(0.15)).current;
@@ -76,64 +76,65 @@ export default function AlertScreen() {
   if (!activeAlert) return null;
 
   return (
-    <View className="flex-1 bg-slate-950 relative justify-between px-6 py-14">
+    <View style={styles.container}>
       
       {/* Red flashing overlay bg */}
       <Animated.View 
-        className="absolute inset-0 bg-red-600"
-        style={{ opacity: flashAnim }}
+        style={[styles.flashingBg, { opacity: flashAnim }]}
       />
 
       {/* Top Banner Alert Info */}
-      <View className="items-center mt-10">
-        <View className="w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500 items-center justify-center mb-6 animate-pulse">
-          <ShieldAlert size={44} className="text-red-500" />
+      <View style={styles.topBanner}>
+        <View style={styles.iconContainer}>
+          <ShieldAlert size={44} color="#EF4444" />
         </View>
-        <Text className="text-3xl font-black text-white tracking-widest text-center">
+        <Text style={styles.bannerTitle}>
           {activeAlert.status === 'escalated' ? 'DISPATCH ACTIVE' : 'FALL DETECTED'}
         </Text>
-        <Text className="text-sm font-bold text-red-200 mt-2 text-center uppercase tracking-widest">
+        <Text style={styles.bannerSubtitle}>
           {activeAlert.status === 'escalated' ? 'Responders notified' : 'Checking client vitals'}
         </Text>
       </View>
 
       {/* Center Countdown or Status details */}
-      <View className="items-center my-6">
+      <View style={styles.centerSection}>
         {activeAlert.status === 'pending' ? (
-          <View className="items-center">
-            <Text className="text-7xl font-black text-white">{countdown}</Text>
-            <Text className="text-xs font-bold text-slate-300 uppercase tracking-widest mt-2">
+          <View style={styles.centerContent}>
+            <Text style={styles.countdownText}>{countdown}</Text>
+            <Text style={styles.countdownSubText}>
               seconds to auto-escalation
             </Text>
           </View>
         ) : (
-          <View className="bg-red-500/20 border border-red-500/30 p-5 rounded-2xl items-center">
-            <BellRing size={32} className="text-red-400 animate-bounce mb-2" />
-            <Text className="text-sm font-bold text-white text-center">Emergency Broadcast Broadcasted</Text>
-            <Text className="text-xs text-red-200 text-center mt-1 leading-4">
+          <View style={styles.statusBox}>
+            <BellRing size={32} color="#F87171" style={styles.statusIcon} />
+            <Text style={styles.statusTitle}>Emergency Broadcast Broadcasted</Text>
+            <Text style={styles.statusSubText}>
               Caregivers and primary responders were notified with GPS telemetry data.
             </Text>
           </View>
         )}
       </View>
 
+      <View style={{ flex: 1 }} />
+
       {/* Patient Location and details card */}
-      <View className="bg-slate-900/90 border border-slate-800/80 p-5 rounded-3xl mb-4">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+      <View style={styles.patientCard}>
+        <Text style={styles.patientLabel}>
           Patient Status
         </Text>
         
-        <Text className="text-lg font-black text-white mb-2">
+        <Text style={styles.patientName}>
           {activeAlert.userName}
         </Text>
 
-        <View className="flex-row items-start mb-1">
-          <MapPin size={16} className="text-red-500 mr-2 mt-0.5" />
-          <View className="flex-1">
-            <Text className="text-xs text-slate-300 leading-4">
+        <View style={styles.locationRow}>
+          <MapPin size={16} color="#EF4444" style={styles.locationIcon} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.addressText}>
               {activeAlert.location.address || 'Address lookup pending...'}
             </Text>
-            <Text className="text-xxs text-slate-500 font-bold mt-1 uppercase">
+            <Text style={styles.coordsText}>
               Lat: {activeAlert.location.latitude.toFixed(5)} | Lng: {activeAlert.location.longitude.toFixed(5)}
             </Text>
           </View>
@@ -141,15 +142,15 @@ export default function AlertScreen() {
       </View>
 
       {/* Controls Action panel */}
-      <View className="space-y-4 mb-4">
+      <View style={styles.actionPanel}>
         {activeAlert.status === 'pending' ? (
-          <View className="space-y-3">
+          <View style={styles.actionGroup}>
             <Button
               title="Cancel (False Alarm)"
               onPress={handleCancelFalseAlarm}
               variant="outline"
               size="lg"
-              className="w-full border-slate-700 bg-slate-900 text-white min-h-[58px]"
+              style={styles.cancelBtn}
             />
             
             <Button
@@ -157,7 +158,7 @@ export default function AlertScreen() {
               onPress={handleEscalateDispatch}
               variant="danger"
               size="lg"
-              className="w-full min-h-[58px] font-bold"
+              style={styles.dispatchBtn}
             />
           </View>
         ) : (
@@ -170,7 +171,7 @@ export default function AlertScreen() {
             }}
             variant="primary"
             size="lg"
-            className="w-full min-h-[58px]"
+            style={styles.ackBtn}
           />
         )}
       </View>
@@ -178,3 +179,162 @@ export default function AlertScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#020617', // slate-950
+    paddingHorizontal: 24,
+    paddingVertical: 56,
+  },
+  flashingBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#DC2626', // red-600
+  },
+  topBanner: {
+    alignItems: 'center',
+    marginTop: 40,
+    zIndex: 10,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(239,68,68,0.2)', // red-500/20
+    borderWidth: 2,
+    borderColor: '#EF4444', // red-500
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  bannerTitle: {
+    fontSize: 30,
+    fontWeight: '900', // black
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  bannerSubtitle: {
+    fontSize: 14,
+    fontWeight: '700', // bold
+    color: '#FECACA', // red-200
+    marginTop: 8,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  centerSection: {
+    alignItems: 'center',
+    marginVertical: 24,
+    zIndex: 10,
+  },
+  centerContent: {
+    alignItems: 'center',
+  },
+  countdownText: {
+    fontSize: 72,
+    fontWeight: '900', // black
+    color: '#FFFFFF',
+  },
+  countdownSubText: {
+    fontSize: 12,
+    fontWeight: '700', // bold
+    color: '#CBD5E1', // slate-300
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginTop: 8,
+  },
+  statusBox: {
+    backgroundColor: 'rgba(239,68,68,0.2)', // red-500/20
+    borderColor: 'rgba(239,68,68,0.3)', // red-500/30
+    borderWidth: 1,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  statusIcon: {
+    marginBottom: 8,
+  },
+  statusTitle: {
+    fontSize: 14,
+    fontWeight: '700', // bold
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  statusSubText: {
+    fontSize: 12,
+    color: '#FECACA', // red-200
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  patientCard: {
+    backgroundColor: 'rgba(15,23,42,0.9)', // slate-900/90
+    borderColor: 'rgba(30,41,59,0.8)', // slate-800/80
+    borderWidth: 1,
+    padding: 20,
+    borderRadius: 24,
+    marginBottom: 16,
+    zIndex: 10,
+  },
+  patientLabel: {
+    fontSize: 12,
+    fontWeight: '700', // bold
+    color: '#94A3B8', // slate-400
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  patientName: {
+    fontSize: 18,
+    fontWeight: '900', // black
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  locationIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  addressText: {
+    fontSize: 12,
+    color: '#CBD5E1', // slate-300
+    lineHeight: 16,
+  },
+  coordsText: {
+    fontSize: 10,
+    color: '#64748B', // slate-500
+    fontWeight: '700', // bold
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  actionPanel: {
+    marginBottom: 16,
+    zIndex: 10,
+  },
+  actionGroup: {
+    gap: 12,
+  },
+  cancelBtn: {
+    width: '100%',
+    borderColor: '#334155', // slate-700
+    backgroundColor: '#0F172A', // slate-900
+    minHeight: 58,
+  },
+  dispatchBtn: {
+    width: '100%',
+    minHeight: 58,
+  },
+  ackBtn: {
+    width: '100%',
+    minHeight: 58,
+  },
+});

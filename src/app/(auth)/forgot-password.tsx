@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { firebaseService } from '../../services/firebase';
 import { Input } from '../../components/ui/Input';
@@ -31,28 +31,28 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-900 px-6 justify-center">
+    <ScrollView contentContainerStyle={styles.scrollContent} style={styles.container}>
       {/* Back link */}
       <Pressable 
         onPress={() => router.back()} 
-        className="flex-row items-center mt-12 mb-4 self-start"
+        style={styles.backButton}
       >
-        <ChevronLeft size={20} className="text-slate-400 mr-1" />
-        <Text className="text-sm font-semibold text-slate-400">Back to Login</Text>
+        <ChevronLeft size={20} color="#94A3B8" style={{ marginRight: 4 }} />
+        <Text style={styles.backButtonText}>Back to Login</Text>
       </Pressable>
 
-      <View className="items-center mb-8">
-        <View className="p-4 bg-teal-500/10 rounded-3xl border border-teal-500/20 mb-4">
-          <Key size={40} className="text-teal-400" />
+      <View style={styles.header}>
+        <View style={styles.iconContainer}>
+          <Key size={40} color="#2DD4BF" />
         </View>
-        <Text className="text-2xl font-extrabold text-white">Reset Password</Text>
-        <Text className="text-sm text-slate-400 mt-1 text-center px-6">
+        <Text style={styles.headerTitle}>Reset Password</Text>
+        <Text style={styles.headerSubtitle}>
           Enter your email to receive recovery instructions.
         </Text>
       </View>
 
       {!isSent ? (
-        <View className="bg-slate-800/40 border border-slate-700/30 p-6 rounded-3xl mb-12">
+        <View style={styles.formContainer}>
           <Input
             label="Registered Email"
             placeholder="yourname@gmail.com"
@@ -69,13 +69,13 @@ export default function ForgotPasswordScreen() {
             isLoading={isLoading}
             variant="primary"
             size="lg"
-            className="w-full mt-2"
+            style={styles.submitBtn}
           />
         </View>
       ) : (
-        <View className="bg-emerald-950/20 border border-emerald-900/50 p-6 rounded-3xl mb-12 items-center">
-          <Text className="text-base font-bold text-emerald-400 mb-2">Instructions Sent!</Text>
-          <Text className="text-sm text-slate-300 text-center leading-5 mb-6">
+        <View style={styles.successContainer}>
+          <Text style={styles.successTitle}>Instructions Sent!</Text>
+          <Text style={styles.successText}>
             We have emailed a secure link to reset your password. Please check your spam folder if you do not receive it in a few minutes.
           </Text>
           <Button
@@ -83,10 +83,91 @@ export default function ForgotPasswordScreen() {
             onPress={() => router.replace('/(auth)/login')}
             variant="primary"
             size="md"
-            className="w-full"
+            style={{ width: '100%' }}
           />
         </View>
       )}
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: '#0F172A', // slate-900
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 48,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8', // slate-400
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  iconContainer: {
+    padding: 16,
+    backgroundColor: 'rgba(20,184,166,0.1)', // teal-500/10
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(20,184,166,0.2)', // teal-500/20
+    marginBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8', // slate-400
+    marginTop: 4,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  formContainer: {
+    backgroundColor: 'rgba(30,41,59,0.4)', // slate-800/40
+    borderColor: 'rgba(51,65,85,0.3)', // slate-700/30
+    borderWidth: 1,
+    padding: 24,
+    borderRadius: 24,
+    marginBottom: 48,
+  },
+  submitBtn: {
+    width: '100%',
+    marginTop: 8,
+  },
+  successContainer: {
+    backgroundColor: 'rgba(2,44,34,0.2)', // emerald-950/20
+    borderColor: 'rgba(6,78,59,0.5)', // emerald-900/50
+    borderWidth: 1,
+    padding: 24,
+    borderRadius: 24,
+    marginBottom: 48,
+    alignItems: 'center',
+  },
+  successTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#34D399', // emerald-400
+    marginBottom: 8,
+  },
+  successText: {
+    fontSize: 14,
+    color: '#CBD5E1', // slate-300
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+});
