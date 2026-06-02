@@ -8,7 +8,8 @@ import { BatteryRing } from '../../../components/Dashboard/BatteryRing';
 import { LiveStatusCard } from '../../../components/Dashboard/LiveStatusCard';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { PhoneCall, AlertTriangle, Flame, ShieldAlert, Footprints, Clock, ArrowRight } from 'lucide-react-native';
+import { PhoneCall, AlertTriangle, ShieldAlert, Footprints, ArrowRight } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -41,18 +42,38 @@ export default function DashboardScreen() {
     );
   };
 
+  const getInitials = (name?: string) => {
+    if (!name) return 'SF';
+    return name
+      .split(' ')
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
-      {/* User Header */}
-      <View style={s.titleRow}>
-        <View>
-          <Text style={s.headerLabel}>
-            {isCaregiver ? 'Monitoring Patient' : 'SafeFall Protection'}
-          </Text>
-          <Text style={s.headerTitle}>
-            Hello, {displayedUser?.fullName.split(' ')[0]}!
-          </Text>
+      {/* Premium Header Greeting Card */}
+      <LinearGradient
+        colors={['#1E293B', '#0F172A']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.userHeaderCard}
+      >
+        <View style={s.userHeaderContent}>
+          <View style={s.avatarContainer}>
+            <Text style={s.avatarText}>{getInitials(displayedUser?.fullName)}</Text>
+          </View>
+          <View style={s.userHeaderTextCol}>
+            <Text style={s.headerLabel}>
+              {isCaregiver ? '🛡️ MONITORING PATIENT' : '🛡️ SAFEFALL PROTECTION'}
+            </Text>
+            <Text style={s.headerTitle}>
+              Hello, {displayedUser?.fullName.split(' ')[0]}!
+            </Text>
+          </View>
         </View>
 
         {isCaregiver && (
@@ -60,11 +81,11 @@ export default function DashboardScreen() {
             onPress={() => router.push('/(app)/caregiver')}
             style={s.switchPatientBtn}
           >
-            <Text style={s.switchPatientText}>Switch Patient</Text>
-            <ArrowRight size={12} color="#0D9488" />
+            <Text style={s.switchPatientText}>Switch</Text>
+            <ArrowRight size={10} color="#2DD4BF" style={{ marginLeft: 2 }} />
           </Pressable>
         )}
-      </View>
+      </LinearGradient>
 
       {/* Main Devices Ring and Connectivity Status */}
       <Card style={s.ringCard}>
@@ -93,24 +114,28 @@ export default function DashboardScreen() {
       {/* Live BLE status panel */}
       <LiveStatusCard />
 
-      {/* Emergency dispatch alert action targets */}
+      {/* SOS Emergency Button */}
       <View style={s.mb4}>
-        <Pressable
-          onPress={handleQuickEmergencyTrigger}
-          style={s.emergencyBtn}
-        >
-          <View style={s.row}>
-            <View style={s.emergencyIconBg}>
-              <PhoneCall size={28} color="#FFFFFF" />
+        <Pressable onPress={handleQuickEmergencyTrigger}>
+          <LinearGradient
+            colors={['#EF4444', '#991B1B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.emergencyBtn}
+          >
+            <View style={s.row}>
+              <View style={s.emergencyIconBg}>
+                <PhoneCall size={22} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={s.emergencyTitle}>Trigger SOS</Text>
+                <Text style={s.emergencySubtitle}>Alerts all active responders immediately</Text>
+              </View>
             </View>
-            <View>
-              <Text style={s.emergencyTitle}>Emergency Call</Text>
-              <Text style={s.emergencySubtitle}>Alerts priority caregivers immediately</Text>
+            <View style={s.emergencyArrow}>
+              <ShieldAlert size={18} color="#FFFFFF" />
             </View>
-          </View>
-          <View style={s.emergencyArrow}>
-            <ShieldAlert size={20} color="#FFFFFF" />
-          </View>
+          </LinearGradient>
         </Pressable>
       </View>
 
@@ -121,7 +146,7 @@ export default function DashboardScreen() {
         <View style={s.activityRow}>
           <View style={s.row}>
             <View style={s.stepIconBg}>
-              <Footprints size={20} color="#0D9488" />
+              <Footprints size={18} color="#2DD4BF" />
             </View>
             <View>
               <Text style={s.activityLabel}>Step Counter</Text>
@@ -129,8 +154,8 @@ export default function DashboardScreen() {
             </View>
           </View>
           <View style={s.alignEnd}>
-            <Text style={s.activityLabel}>Target</Text>
-            <Text style={s.activityPercent}>{progressPercent}% done</Text>
+            <Text style={s.activityLabel}>Progress</Text>
+            <Text style={s.activityPercent}>{progressPercent}% completed</Text>
           </View>
         </View>
 
@@ -157,9 +182,9 @@ export default function DashboardScreen() {
 
       {/* Simulator Tools Controls panel if Developer Sandbox */}
       {isSimulatorMode && isConnected && (
-        <Card style={s.simulatorCard} accentBorder>
+        <Card style={s.simulatorCard}>
           <View style={s.simulatorHeader}>
-            <AlertTriangle size={18} color="#0D9488" style={s.mr2} />
+            <AlertTriangle size={18} color="#F59E0B" style={s.mr2} />
             <Text style={s.simulatorTitle}>Simulator Sandbox Tools</Text>
           </View>
           <Text style={s.simulatorDesc}>
@@ -185,111 +210,181 @@ const s = StyleSheet.create({
     paddingTop: 56,
     paddingBottom: 40,
   },
-  titleRow: {
+  userHeaderCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    padding: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    marginBottom: 20,
+  },
+  userHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    color: '#2DD4BF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  userHeaderTextCol: {
+    justifyContent: 'center',
   },
   headerLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
-    textTransform: 'uppercase',
     letterSpacing: 1.2,
-    color: '#64748B',
+    color: '#94A3B8',
+    marginBottom: 2,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
     color: '#FFFFFF',
   },
   switchPatientBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(13,148,136,0.1)',
+    paddingVertical: 8,
+    backgroundColor: 'rgba(45,212,191,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(13,148,136,0.2)',
-    borderRadius: 999,
+    borderColor: 'rgba(45,212,191,0.15)',
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
   },
   switchPatientText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#0D9488',
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#2DD4BF',
     textTransform: 'uppercase',
-    marginRight: 4,
   },
-  ringCard: { alignItems: 'center', paddingVertical: 24, marginBottom: 16 },
+  ringCard: { 
+    alignItems: 'center', 
+    paddingVertical: 24, 
+    marginBottom: 16,
+    backgroundColor: 'rgba(30,41,59,0.3)',
+  },
   ringRow: {
     flexDirection: 'row',
     width: '100%',
     justifyContent: 'space-around',
     alignItems: 'center',
   },
-  vitalsCol: { gap: 8 },
+  vitalsCol: { 
+    gap: 12,
+  },
   vitalLabel: {
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
     color: '#64748B',
+    letterSpacing: 0.5,
   },
-  vitalStatus: { fontSize: 16, fontWeight: '800' },
+  vitalStatus: { 
+    fontSize: 18, 
+    fontWeight: '900',
+    marginTop: 2,
+  },
   textEmerald: { color: '#10B981' },
-  textSlate: { color: '#94A3B8' },
-  vitalValue: { fontSize: 12, fontWeight: '600', color: '#CBD5E1' },
+  textSlate: { color: '#64748B' },
+  vitalValue: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#E2E8F0',
+    marginTop: 2,
+  },
   mb4: { marginBottom: 16 },
   mr2: { marginRight: 8 },
   row: { flexDirection: 'row', alignItems: 'center' },
   alignEnd: { alignItems: 'flex-end' },
   emergencyBtn: {
-    backgroundColor: '#EF4444',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.2)',
     borderRadius: 24,
-    padding: 20,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
   },
   emergencyIconBg: {
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 16,
-    marginRight: 16,
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 14,
+    marginRight: 14,
   },
-  emergencyTitle: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
-  emergencySubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
+  emergencyTitle: { 
+    fontSize: 16, 
+    fontWeight: '900', 
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  emergencySubtitle: { 
+    fontSize: 11, 
+    color: 'rgba(255,255,255,0.75)', 
+    fontWeight: '600',
+    marginTop: 1,
+  },
   emergencyArrow: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activityTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 },
+  activityTitle: { 
+    fontSize: 14, 
+    fontWeight: '800', 
+    color: '#FFFFFF', 
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   activityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   stepIconBg: {
-    padding: 10,
-    backgroundColor: 'rgba(13,148,136,0.05)',
-    borderRadius: 12,
-    marginRight: 12,
+    padding: 8,
+    backgroundColor: 'rgba(45,212,191,0.06)',
+    borderRadius: 10,
+    marginRight: 10,
   },
   activityLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  activityValue: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  activityPercent: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
+  activityValue: { 
+    fontSize: 15, 
+    fontWeight: '800', 
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  activityPercent: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#2DD4BF',
+    marginTop: 2,
+  },
   progressBg: {
-    height: 8,
+    height: 6,
     width: '100%',
     backgroundColor: '#1E293B',
     borderRadius: 999,
@@ -305,8 +400,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(30,41,59,0.8)',
-    paddingTop: 16,
+    borderTopColor: 'rgba(30,41,59,0.5)',
+    paddingTop: 14,
   },
   metricItem: { alignItems: 'center', flex: 1 },
   metricItemBorder: {
@@ -314,17 +409,17 @@ const s = StyleSheet.create({
     flex: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    borderColor: 'rgba(30,41,59,0.8)',
+    borderColor: 'rgba(30,41,59,0.5)',
   },
-  metricLabel: { fontSize: 12, color: '#64748B', marginBottom: 2 },
-  metricValue: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  metricLabel: { fontSize: 11, color: '#64748B', marginBottom: 2 },
+  metricValue: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   simulatorCard: {
-    borderColor: 'rgba(13,148,136,0.2)',
-    backgroundColor: 'rgba(13,148,136,0.05)',
+    borderColor: 'rgba(245,158,11,0.2)',
+    backgroundColor: 'rgba(245,158,11,0.03)',
     marginBottom: 24,
   },
   simulatorHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  simulatorTitle: { fontSize: 14, fontWeight: '700', color: '#0D9488' },
+  simulatorTitle: { fontSize: 14, fontWeight: '800', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: 0.5 },
   simulatorDesc: {
     fontSize: 12,
     color: '#94A3B8',

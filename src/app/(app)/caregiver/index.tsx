@@ -6,8 +6,9 @@ import { firebaseService } from '../../../services/firebase';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
-import { User, Plus, ChevronRight, Activity, Link, ChevronLeft } from 'lucide-react-native';
+import { User, ChevronRight, Link, ChevronLeft } from 'lucide-react-native';
 import { CaregiverRelation } from '../../../types';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CaregiverScreen() {
   const router = useRouter();
@@ -76,7 +77,7 @@ export default function CaregiverScreen() {
         onPress={() => router.replace('/(app)/(tabs)/settings')} 
         style={s.backBtn}
       >
-        <ChevronLeft size={20} color="#94A3B8" style={s.mr1} />
+        <ChevronLeft size={16} color="#94A3B8" />
         <Text style={s.backText}>Settings</Text>
       </Pressable>
 
@@ -86,9 +87,9 @@ export default function CaregiverScreen() {
       </View>
 
       {/* Link New Profile */}
-      <Card style={s.mb6}>
+      <Card style={s.formCard}>
         <View style={s.linkHeader}>
-          <Link size={18} color="#0D9488" style={s.mr2} />
+          <Link size={16} color="#2DD4BF" style={s.mr2} />
           <Text style={s.linkTitle}>Link Elderly Profile</Text>
         </View>
 
@@ -120,27 +121,45 @@ export default function CaregiverScreen() {
         ) : caregiverRelations.length > 0 ? (
           caregiverRelations.map((rel) => {
             const isCurrentlySelected = activeElderlyProfile?.userId === rel.elderlyId;
-            return (
-              <Pressable
-                key={rel.relationId}
-                onPress={() => handleSelectElderly(rel)}
-                style={[
-                  s.profileCard,
-                  isCurrentlySelected ? s.profileCardActive : s.profileCardDefault,
-                ]}
-              >
+            const cardContent = (
+              <>
                 <View style={s.row}>
-                  <View style={s.profileIconBg}>
-                    <User size={20} color="#94A3B8" />
+                  <View style={[s.profileIconBg, isCurrentlySelected ? s.profileIconBgActive : null]}>
+                    <User size={18} color={isCurrentlySelected ? '#2DD4BF' : '#94A3B8'} />
                   </View>
                   <View>
                     <Text style={s.profileName}>{rel.elderlyName}</Text>
-                    <Text style={s.profileStatus}>
+                    <Text style={[s.profileStatus, isCurrentlySelected ? s.profileStatusActive : null]}>
                       {isCurrentlySelected ? 'ACTIVE TRACKING' : 'CLICK TO MONITOR'}
                     </Text>
                   </View>
                 </View>
-                <ChevronRight size={18} color="#94A3B8" />
+                <ChevronRight size={16} color={isCurrentlySelected ? '#2DD4BF' : '#64748B'} />
+              </>
+            );
+
+            if (isCurrentlySelected) {
+              return (
+                <Pressable key={rel.relationId} onPress={() => handleSelectElderly(rel)}>
+                  <LinearGradient
+                    colors={['rgba(13,148,136,0.15)', 'rgba(15,23,42,0.45)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[s.profileCard, s.profileCardActive]}
+                  >
+                    {cardContent}
+                  </LinearGradient>
+                </Pressable>
+              );
+            }
+
+            return (
+              <Pressable
+                key={rel.relationId}
+                onPress={() => handleSelectElderly(rel)}
+                style={[s.profileCard, s.profileCardDefault]}
+              >
+                {cardContent}
               </Pressable>
             );
           })
@@ -169,29 +188,41 @@ const s = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
     alignSelf: 'flex-start',
+    backgroundColor: 'rgba(30,41,59,0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    gap: 4,
   },
-  backText: { fontSize: 14, fontWeight: '600', color: '#94A3B8' },
+  backText: { fontSize: 12, fontWeight: '700', color: '#94A3B8' },
   mr1: { marginRight: 4 },
   mr2: { marginRight: 8 },
   mb6: { marginBottom: 24 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
   headerSubtitle: { fontSize: 14, color: '#64748B', marginTop: 4 },
+  formCard: {
+    backgroundColor: 'rgba(30,41,59,0.25)',
+    borderColor: '#1E293B',
+    marginBottom: 24,
+  },
   linkHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
   },
-  linkTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  linkTitle: { fontSize: 13, fontWeight: '800', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 },
   connectBtn: { width: '100%', marginTop: 8 },
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     marginBottom: 12,
     marginLeft: 4,
   },
@@ -201,29 +232,43 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 12,
+    borderWidth: 1,
   },
-  profileCardDefault: { borderColor: '#334155' },
-  profileCardActive: { borderColor: '#0D9488', backgroundColor: 'rgba(13,148,136,0.05)' },
+  profileCardDefault: { 
+    borderColor: '#1E293B',
+    backgroundColor: 'rgba(30,41,59,0.3)',
+  },
+  profileCardActive: { 
+    borderColor: '#0D9488',
+  },
   profileIconBg: {
     padding: 10,
-    backgroundColor: 'rgba(30,41,59,0.8)',
+    backgroundColor: '#1E293B',
     borderRadius: 12,
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
-  profileName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  profileIconBgActive: {
+    backgroundColor: 'rgba(13,148,136,0.15)',
+    borderColor: 'rgba(45,212,191,0.25)',
+  },
+  profileName: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
   profileStatus: {
-    fontSize: 10,
-    color: '#94A3B8',
-    fontWeight: '700',
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    marginTop: 2,
+    marginTop: 3,
+    letterSpacing: 0.5,
   },
-  emptyCard: { alignItems: 'center', paddingVertical: 32 },
-  emptyTitle: { fontSize: 14, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
+  profileStatusActive: {
+    color: '#2DD4BF',
+  },
+  emptyCard: { alignItems: 'center', paddingVertical: 32, backgroundColor: 'rgba(30,41,59,0.15)' },
+  emptyTitle: { fontSize: 14, fontWeight: '800', color: '#CBD5E1', marginBottom: 4 },
   emptySubtitle: {
     fontSize: 12,
     color: '#64748B',

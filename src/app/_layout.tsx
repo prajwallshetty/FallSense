@@ -7,6 +7,8 @@ import { notificationService } from '../services/notificationService';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Shield } from 'lucide-react-native';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -54,11 +56,17 @@ export default function RootLayout() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0D9488" />
+      <LinearGradient
+        colors={['#020617', '#0F172A', '#020617']}
+        style={styles.loadingContainer}
+      >
+        <View style={styles.logoBadge}>
+          <Shield size={32} color="#2DD4BF" />
+        </View>
         <Text style={styles.loadingTitle}>SafeFall AI</Text>
-        <Text style={styles.loadingSubtitle}>Loading secure parameters...</Text>
-      </View>
+        <Text style={styles.loadingSubtitle}>Securing bio-telemetry stream...</Text>
+        <ActivityIndicator size="small" color="#0D9488" style={styles.spinner} />
+      </LinearGradient>
     );
   }
 
@@ -92,17 +100,39 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F172A',
+    paddingHorizontal: 32,
+  },
+  logoBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: 'rgba(13, 148, 136, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(45, 212, 191, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#2DD4BF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loadingTitle: {
-    color: '#0D9488',
-    fontWeight: 'bold',
-    fontSize: 22,
-    marginTop: 16,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 26,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   loadingSubtitle: {
     color: '#64748B',
-    fontSize: 12,
-    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
+  spinner: {
+    marginTop: 32,
   },
 });

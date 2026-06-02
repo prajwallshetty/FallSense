@@ -19,9 +19,9 @@ export const BatteryRing: React.FC<BatteryRingProps> = ({
 
   // Determine colors based on charge level
   const getBatteryColors = () => {
-    if (percentage > 50) return { start: '#0D9488', end: '#2DD4BF', text: 'text-teal-600 dark:text-teal-400' }; // Good - Teal
-    if (percentage > 20) return { start: '#D97706', end: '#FBBF24', text: 'text-amber-600 dark:text-amber-400' }; // Moderate - Amber
-    return { start: '#EF4444', end: '#F87171', text: 'text-red-600 dark:text-red-500 animate-pulse' }; // Critical - Red
+    if (percentage > 50) return { start: '#0D9488', end: '#2DD4BF', text: '#2DD4BF' }; // Good - Teal
+    if (percentage > 20) return { start: '#D97706', end: '#FBBF24', text: '#FBBF24' }; // Moderate - Amber
+    return { start: '#EF4444', end: '#F87171', text: '#EF4444' }; // Critical - Red
   };
 
   const colors = getBatteryColors();
@@ -44,7 +44,7 @@ export const BatteryRing: React.FC<BatteryRingProps> = ({
           stroke="#E2E8F0"
           strokeWidth={strokeWidth}
           fill="transparent"
-          strokeOpacity={0.2}
+          strokeOpacity={0.1}
         />
 
         {/* Foreground Progress Circle */}
@@ -66,7 +66,7 @@ export const BatteryRing: React.FC<BatteryRingProps> = ({
         <Text style={styles.percentageText}>
           {percentage}%
         </Text>
-        <Text style={styles.batteryText}>
+        <Text style={[styles.batteryText, { color: colors.text }]}>
           Battery
         </Text>
       </View>
@@ -86,15 +86,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   percentageText: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#1E293B',
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
   batteryText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: '#64748B',
+    letterSpacing: 1,
+    marginTop: 2,
   },
 });
