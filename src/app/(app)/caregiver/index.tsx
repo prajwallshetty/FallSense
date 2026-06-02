@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/authStore';
 import { firebaseService } from '../../../services/firebase';
@@ -69,27 +69,27 @@ export default function CaregiverScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* Back button */}
       <Pressable 
         onPress={() => router.replace('/(app)/(tabs)/settings')} 
-        className="flex-row items-center mb-4 self-start"
+        style={s.backBtn}
       >
-        <ChevronLeft size={20} className="text-slate-400 mr-1" />
-        <Text className="text-sm font-semibold text-slate-400">Settings</Text>
+        <ChevronLeft size={20} color="#94A3B8" style={s.mr1} />
+        <Text style={s.backText}>Settings</Text>
       </Pressable>
 
-      <View className="mb-6">
-        <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">Caregiver Hub</Text>
-        <Text className="text-sm text-slate-400 dark:text-slate-500 mt-1">Manage and track monitored elderly profiles</Text>
+      <View style={s.mb6}>
+        <Text style={s.headerTitle}>Caregiver Hub</Text>
+        <Text style={s.headerSubtitle}>Manage and track monitored elderly profiles</Text>
       </View>
 
       {/* Link New Profile */}
-      <Card className="mb-6">
-        <View className="flex-row items-center mb-4">
-          <Link size={18} className="text-teal-600 dark:text-teal-400 mr-2" />
-          <Text className="text-sm font-bold text-slate-800 dark:text-white">Link Elderly Profile</Text>
+      <Card style={s.mb6}>
+        <View style={s.linkHeader}>
+          <Link size={18} color="#0D9488" style={s.mr2} />
+          <Text style={s.linkTitle}>Link Elderly Profile</Text>
         </View>
 
         <Input
@@ -107,16 +107,16 @@ export default function CaregiverScreen() {
           isLoading={isLinking}
           variant="primary"
           size="md"
-          className="w-full mt-2"
+          style={s.connectBtn}
         />
       </Card>
 
       {/* Monitored Profiles List */}
-      <View className="mb-6">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">Monitored Profiles</Text>
+      <View style={s.mb6}>
+        <Text style={s.sectionLabel}>Monitored Profiles</Text>
         
         {isLoading ? (
-          <ActivityIndicator size="small" color="#0D9488" className="my-6" />
+          <ActivityIndicator size="small" color="#0D9488" style={s.loader} />
         ) : caregiverRelations.length > 0 ? (
           caregiverRelations.map((rel) => {
             const isCurrentlySelected = activeElderlyProfile?.userId === rel.elderlyId;
@@ -124,29 +124,30 @@ export default function CaregiverScreen() {
               <Pressable
                 key={rel.relationId}
                 onPress={() => handleSelectElderly(rel)}
-                className={`flex-row items-center justify-between p-4 bg-white dark:bg-slate-900 border rounded-2xl mb-3 shadow-sm ${
-                  isCurrentlySelected ? 'border-teal-500 bg-teal-50/10' : 'border-slate-100 dark:border-slate-800'
-                }`}
+                style={[
+                  s.profileCard,
+                  isCurrentlySelected ? s.profileCardActive : s.profileCardDefault,
+                ]}
               >
-                <View className="flex-row items-center">
-                  <View className="p-2.5 bg-slate-100 dark:bg-slate-850 rounded-xl mr-3">
-                    <User size={20} className="text-slate-600 dark:text-slate-400" />
+                <View style={s.row}>
+                  <View style={s.profileIconBg}>
+                    <User size={20} color="#94A3B8" />
                   </View>
                   <View>
-                    <Text className="text-sm font-bold text-slate-800 dark:text-white">{rel.elderlyName}</Text>
-                    <Text className="text-xxs text-slate-400 font-bold uppercase mt-0.5">
+                    <Text style={s.profileName}>{rel.elderlyName}</Text>
+                    <Text style={s.profileStatus}>
                       {isCurrentlySelected ? 'ACTIVE TRACKING' : 'CLICK TO MONITOR'}
                     </Text>
                   </View>
                 </View>
-                <ChevronRight size={18} className="text-slate-400" />
+                <ChevronRight size={18} color="#94A3B8" />
               </Pressable>
             );
           })
         ) : (
-          <Card className="items-center py-8">
-            <Text className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">No profiles linked yet</Text>
-            <Text className="text-xs text-slate-400 dark:text-slate-500 text-center px-4 leading-4.5">
+          <Card style={s.emptyCard}>
+            <Text style={s.emptyTitle}>No profiles linked yet</Text>
+            <Text style={s.emptySubtitle}>
               Enter the patient's registered email address above to link their smartwatch data with your console.
             </Text>
           </Card>
@@ -156,3 +157,78 @@ export default function CaregiverScreen() {
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  backText: { fontSize: 14, fontWeight: '600', color: '#94A3B8' },
+  mr1: { marginRight: 4 },
+  mr2: { marginRight: 8 },
+  mb6: { marginBottom: 24 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  headerSubtitle: { fontSize: 14, color: '#64748B', marginTop: 4 },
+  linkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  linkTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  connectBtn: { width: '100%', marginTop: 8 },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  loader: { marginVertical: 24 },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  profileCardDefault: { borderColor: '#334155' },
+  profileCardActive: { borderColor: '#0D9488', backgroundColor: 'rgba(13,148,136,0.05)' },
+  profileIconBg: {
+    padding: 10,
+    backgroundColor: 'rgba(30,41,59,0.8)',
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  profileName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  profileStatus: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  emptyCard: { alignItems: 'center', paddingVertical: 32 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 18,
+  },
+});

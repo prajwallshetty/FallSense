@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Share, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Share, Pressable, Alert, StyleSheet } from 'react-native';
 import { useAuthStore } from '../../../store/authStore';
 import { locationService } from '../../../services/locationService';
 import { LiveMap } from '../../../components/Map/LiveMap';
@@ -45,9 +45,9 @@ export default function LocationScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 justify-center items-center bg-slate-50 dark:bg-slate-950">
+      <View style={s.loadingContainer}>
         <ActivityIndicator size="large" color="#0D9488" />
-        <Text className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Acquiring GPS Signal...</Text>
+        <Text style={s.loadingText}>Acquiring GPS Signal...</Text>
       </View>
     );
   }
@@ -59,24 +59,24 @@ export default function LocationScreen() {
   ];
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* Title Header */}
-      <View className="flex-row items-center justify-between mb-6">
+      <View style={s.titleRow}>
         <View>
-          <Text className="text-xxs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <Text style={s.headerLabel}>
             GPS tracking
           </Text>
-          <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">
+          <Text style={s.headerTitle}>
             Live Location
           </Text>
         </View>
 
         <Pressable 
           onPress={fetchLiveLocation}
-          className="p-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl"
+          style={s.refreshBtn}
         >
-          <RefreshCw size={18} className="text-slate-600 dark:text-slate-400" />
+          <RefreshCw size={18} color="#94A3B8" />
         </Pressable>
       </View>
 
@@ -91,10 +91,10 @@ export default function LocationScreen() {
       )}
 
       {/* Broadcast CTA panel */}
-      <Card className="mb-4 flex-row items-center justify-between">
-        <View className="flex-1 pr-3">
-          <Text className="text-sm font-bold text-slate-800 dark:text-white mb-0.5">Share Tracking Access</Text>
-          <Text className="text-xs text-slate-500 dark:text-slate-400 leading-4">
+      <Card style={s.shareCard}>
+        <View style={s.shareCardLeft}>
+          <Text style={s.shareTitle}>Share Tracking Access</Text>
+          <Text style={s.shareSubtitle}>
             Broadcast encrypted GPS coords directly via SMS/Email to emergency contacts.
           </Text>
         </View>
@@ -103,39 +103,39 @@ export default function LocationScreen() {
           onPress={handleShareTracking}
           variant="outline"
           size="sm"
-          className="border-slate-300"
+          style={s.shareBtn}
         />
       </Card>
 
       {/* Fall Risk Hotspots */}
-      <Card className="mb-6">
-        <View className="flex-row items-center mb-3">
-          <AlertCircle size={18} className="text-amber-500 mr-2" />
-          <Text className="text-sm font-bold text-slate-800 dark:text-white">Geo-Protection Safezones</Text>
+      <Card style={s.mb6}>
+        <View style={s.sectionHeaderRow}>
+          <AlertCircle size={18} color="#F59E0B" style={s.mr2} />
+          <Text style={s.sectionTitle}>Geo-Protection Safezones</Text>
         </View>
         
-        <Text className="text-xs text-slate-500 dark:text-slate-400 leading-4.5 mb-4">
+        <Text style={s.safezoneDesc}>
           SafeFall AI tracks historical falls and home parameters to detect fall-prone hotspots.
         </Text>
 
-        <View className="space-y-3">
-          <View className="flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2 mb-2">
+        <View style={s.safezoneList}>
+          <View style={s.safezoneItem}>
             <View>
-              <Text className="text-xs font-bold text-slate-700 dark:text-slate-200">Living Room Area</Text>
-              <Text className="text-xxs text-slate-400 dark:text-slate-500 font-semibold">1 fall anomaly recorded</Text>
+              <Text style={s.safezoneName}>Living Room Area</Text>
+              <Text style={s.safezoneDetail}>1 fall anomaly recorded</Text>
             </View>
-            <View className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded">
-              <Text className="text-xxs font-bold text-amber-600 uppercase">Medium Risk</Text>
+            <View style={s.badgeMedium}>
+              <Text style={s.badgeMediumText}>Medium Risk</Text>
             </View>
           </View>
 
-          <View className="flex-row items-center justify-between">
+          <View style={s.safezoneItemLast}>
             <View>
-              <Text className="text-xs font-bold text-slate-700 dark:text-slate-200">Bathroom / Shower</Text>
-              <Text className="text-xxs text-slate-400 dark:text-slate-500 font-semibold">0 anomalies. Floor pad installed</Text>
+              <Text style={s.safezoneName}>Bathroom / Shower</Text>
+              <Text style={s.safezoneDetail}>0 anomalies. Floor pad installed</Text>
             </View>
-            <View className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 rounded">
-              <Text className="text-xxs font-bold text-emerald-600 uppercase">Safezone</Text>
+            <View style={s.badgeSafe}>
+              <Text style={s.badgeSafeText}>Safezone</Text>
             </View>
           </View>
         </View>
@@ -144,3 +144,100 @@ export default function LocationScreen() {
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  loadingText: { fontSize: 14, color: '#94A3B8', marginTop: 8, fontWeight: '500' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    color: '#64748B',
+  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  refreshBtn: {
+    padding: 8,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+  },
+  shareCard: {
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  shareCardLeft: { flex: 1, paddingRight: 12 },
+  shareTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginBottom: 2 },
+  shareSubtitle: { fontSize: 12, color: '#94A3B8', lineHeight: 16 },
+  shareBtn: { borderColor: '#475569' },
+  mb6: { marginBottom: 24 },
+  mr2: { marginRight: 8 },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  safezoneDesc: {
+    fontSize: 12,
+    color: '#94A3B8',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  safezoneList: {},
+  safezoneItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(30,41,59,0.8)',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  safezoneItemLast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  safezoneName: { fontSize: 12, fontWeight: '700', color: '#E2E8F0' },
+  safezoneDetail: { fontSize: 10, color: '#64748B', fontWeight: '600' },
+  badgeMedium: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(245,158,11,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.3)',
+    borderRadius: 4,
+  },
+  badgeMediumText: { fontSize: 10, fontWeight: '700', color: '#D97706', textTransform: 'uppercase' },
+  badgeSafe: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(16,185,129,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.3)',
+    borderRadius: 4,
+  },
+  badgeSafeText: { fontSize: 10, fontWeight: '700', color: '#10B981', textTransform: 'uppercase' },
+});

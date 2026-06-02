@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Pressable, Alert, StyleSheet } from 'react-native';
 import { useAuthStore } from '../../../store/authStore';
 import { firebaseService } from '../../../services/firebase';
 import { AnalyticsChart } from '../../../components/Health/AnalyticsChart';
@@ -86,32 +86,32 @@ export default function HealthScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 justify-center items-center bg-slate-50 dark:bg-slate-950">
+      <View style={s.loadingContainer}>
         <ActivityIndicator size="large" color="#0D9488" />
-        <Text className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Fetching vitals logs...</Text>
+        <Text style={s.loadingText}>Fetching vitals logs...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* Title Header */}
-      <View className="flex-row items-center justify-between mb-6">
+      <View style={s.titleRow}>
         <View>
-          <Text className="text-xxs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <Text style={s.headerLabel}>
             Health Portal
           </Text>
-          <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">
+          <Text style={s.headerTitle}>
             Vitals & Analytics
           </Text>
         </View>
 
         <Pressable 
           onPress={fetchHealthData}
-          className="p-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl"
+          style={s.refreshBtn}
         >
-          <RefreshCw size={18} className="text-slate-600 dark:text-slate-400" />
+          <RefreshCw size={18} color="#94A3B8" />
         </Pressable>
       </View>
 
@@ -133,44 +133,44 @@ export default function HealthScreen() {
       />
 
       {/* Fall History List */}
-      <View className="mb-6">
-        <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-row items-center">
-            <Activity size={18} className="text-slate-600 dark:text-slate-400 mr-2" />
-            <Text className="text-base font-bold text-slate-800 dark:text-white">Fall Incident Log</Text>
+      <View style={s.mb6}>
+        <View style={s.sectionHeader}>
+          <View style={s.row}>
+            <Activity size={18} color="#94A3B8" style={s.mr2} />
+            <Text style={s.sectionTitle}>Fall Incident Log</Text>
           </View>
           <Pressable 
             onPress={handleExport}
-            className="flex-row items-center px-3 py-1.5 bg-teal-500/10 border border-teal-500/20 rounded-lg"
+            style={s.exportBtn}
           >
-            <Download size={14} className="text-teal-600 dark:text-teal-400 mr-1" />
-            <Text className="text-xxs font-bold text-teal-600 dark:text-teal-400 uppercase">Export</Text>
+            <Download size={14} color="#0D9488" style={s.mr1} />
+            <Text style={s.exportText}>Export</Text>
           </Pressable>
         </View>
 
         {alerts.length > 0 ? (
           alerts.map((alert) => (
-            <Card key={alert.alertId} className="mb-3 border-slate-100 dark:border-slate-800 p-4">
-              <View className="flex-row items-start justify-between mb-2">
+            <Card key={alert.alertId} style={s.alertCard}>
+              <View style={s.alertHeader}>
                 <View>
-                  <Text className="text-sm font-bold text-slate-800 dark:text-white">
+                  <Text style={s.alertName}>
                     {alert.userName || 'Margaret Thompson'}
                   </Text>
-                  <Text className="text-xxs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
+                  <Text style={s.alertTimestamp}>
                     {new Date(alert.timestamp).toLocaleString()}
                   </Text>
                 </View>
                 <StatusBadge status={alert.status} />
               </View>
 
-              <Text className="text-xs text-slate-500 dark:text-slate-400 leading-4.5 mb-2">
+              <Text style={s.alertLocation}>
                 Location: {alert.location.address || 'Address unmapped'}
               </Text>
               
               {alert.resolvedAt && (
-                <View className="flex-row items-center border-t border-slate-100 dark:border-slate-800/80 pt-2 mt-2">
-                  <Calendar size={12} className="text-slate-400 mr-1.5" />
-                  <Text className="text-xxs font-semibold text-slate-400 dark:text-slate-500">
+                <View style={s.resolvedRow}>
+                  <Calendar size={12} color="#94A3B8" style={s.mr1p5} />
+                  <Text style={s.resolvedText}>
                     Resolved at {new Date(alert.resolvedAt).toLocaleTimeString()}
                   </Text>
                 </View>
@@ -178,9 +178,9 @@ export default function HealthScreen() {
             </Card>
           ))
         ) : (
-          <Card className="items-center py-8">
-            <Text className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">No Fall Alerts Registered</Text>
-            <Text className="text-xs text-slate-400 dark:text-slate-500 text-center px-4 leading-4.5">
+          <Card style={s.emptyCard}>
+            <Text style={s.emptyTitle}>No Fall Alerts Registered</Text>
+            <Text style={s.emptySubtitle}>
               The smartwatch telemetry logs are clean. No fall anomalies have been recorded recently.
             </Text>
           </Card>
@@ -190,3 +190,105 @@ export default function HealthScreen() {
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  loadingText: { fontSize: 14, color: '#94A3B8', marginTop: 8, fontWeight: '500' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    color: '#64748B',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  refreshBtn: {
+    padding: 8,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+  },
+  mb6: { marginBottom: 24 },
+  mr1: { marginRight: 4 },
+  mr1p5: { marginRight: 6 },
+  mr2: { marginRight: 8 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(13,148,136,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(13,148,136,0.2)',
+    borderRadius: 8,
+  },
+  exportText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0D9488',
+    textTransform: 'uppercase',
+  },
+  alertCard: {
+    marginBottom: 12,
+    borderColor: '#1E293B',
+    padding: 16,
+  },
+  alertHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  alertName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  alertTimestamp: { fontSize: 10, color: '#64748B', fontWeight: '600', marginTop: 2 },
+  alertLocation: { fontSize: 12, color: '#94A3B8', lineHeight: 18, marginBottom: 8 },
+  resolvedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30,41,59,0.8)',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  resolvedText: { fontSize: 10, fontWeight: '600', color: '#64748B' },
+  emptyCard: { alignItems: 'center', paddingVertical: 32 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 18,
+  },
+});

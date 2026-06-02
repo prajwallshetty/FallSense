@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Alert, Pressable, Platform } from 'react-native';
+import { View, Text, ScrollView, Alert, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/authStore';
 import { useDeviceStore } from '../../../store/deviceStore';
@@ -42,15 +42,15 @@ export default function DashboardScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* User Header */}
-      <View className="flex-row items-center justify-between mb-6">
+      <View style={s.titleRow}>
         <View>
-          <Text className="text-xxs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <Text style={s.headerLabel}>
             {isCaregiver ? 'Monitoring Patient' : 'SafeFall Protection'}
           </Text>
-          <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">
+          <Text style={s.headerTitle}>
             Hello, {displayedUser?.fullName.split(' ')[0]}!
           </Text>
         </View>
@@ -58,31 +58,31 @@ export default function DashboardScreen() {
         {isCaregiver && (
           <Pressable 
             onPress={() => router.push('/(app)/caregiver')}
-            className="px-3 py-1.5 bg-teal-500/10 border border-teal-500/20 rounded-full flex-row items-center"
+            style={s.switchPatientBtn}
           >
-            <Text className="text-xxs font-bold text-teal-600 dark:text-teal-400 uppercase mr-1">Switch Patient</Text>
-            <ArrowRight size={12} className="text-teal-600 dark:text-teal-400" />
+            <Text style={s.switchPatientText}>Switch Patient</Text>
+            <ArrowRight size={12} color="#0D9488" />
           </Pressable>
         )}
       </View>
 
       {/* Main Devices Ring and Connectivity Status */}
-      <Card className="items-center py-6 mb-4">
-        <View className="flex-row w-full justify-around items-center">
+      <Card style={s.ringCard}>
+        <View style={s.ringRow}>
           {/* Battery ring */}
           <BatteryRing percentage={pairedDevice && isConnected ? pairedDevice.batteryLevel : 0} />
           
           {/* Vitals Summary Column */}
-          <View className="space-y-2">
+          <View style={s.vitalsCol}>
             <View>
-              <Text className="text-xxs font-bold uppercase text-slate-400 dark:text-slate-500">Fall Monitor</Text>
-              <Text className={`text-base font-extrabold ${isConnected ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <Text style={s.vitalLabel}>Fall Monitor</Text>
+              <Text style={[s.vitalStatus, isConnected ? s.textEmerald : s.textSlate]}>
                 {isConnected ? 'SENSING LIVE' : 'OFFLINE'}
               </Text>
             </View>
             <View>
-              <Text className="text-xxs font-bold uppercase text-slate-400 dark:text-slate-500">Last Sync Time</Text>
-              <Text className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <Text style={s.vitalLabel}>Last Sync Time</Text>
+              <Text style={s.vitalValue}>
                 {pairedDevice && isConnected ? 'Just now' : 'Yesterday'}
               </Text>
             </View>
@@ -94,75 +94,75 @@ export default function DashboardScreen() {
       <LiveStatusCard />
 
       {/* Emergency dispatch alert action targets */}
-      <View className="mb-4">
+      <View style={s.mb4}>
         <Pressable
           onPress={handleQuickEmergencyTrigger}
-          className="bg-red-500 active:bg-red-600 border border-red-400/20 rounded-3xl p-5 flex-row items-center justify-between shadow-md"
+          style={s.emergencyBtn}
         >
-          <View className="flex-row items-center">
-            <View className="p-3 bg-white/20 rounded-2xl mr-4">
-              <PhoneCall size={28} className="text-white" />
+          <View style={s.row}>
+            <View style={s.emergencyIconBg}>
+              <PhoneCall size={28} color="#FFFFFF" />
             </View>
             <View>
-              <Text className="text-lg font-black text-white">Emergency Call</Text>
-              <Text className="text-xs text-white/80 font-medium">Alerts priority caregivers immediately</Text>
+              <Text style={s.emergencyTitle}>Emergency Call</Text>
+              <Text style={s.emergencySubtitle}>Alerts priority caregivers immediately</Text>
             </View>
           </View>
-          <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center">
-            <ShieldAlert size={20} className="text-white animate-pulse" />
+          <View style={s.emergencyArrow}>
+            <ShieldAlert size={20} color="#FFFFFF" />
           </View>
         </Pressable>
       </View>
 
       {/* Daily activity logs */}
-      <Card className="mb-4">
-        <Text className="text-base font-bold text-slate-800 dark:text-white mb-4">Daily Activity Summary</Text>
+      <Card style={s.mb4}>
+        <Text style={s.activityTitle}>Daily Activity Summary</Text>
         
-        <View className="flex-row justify-between mb-4">
-          <View className="flex-row items-center">
-            <View className="p-2.5 bg-teal-50 dark:bg-teal-950/20 rounded-xl mr-3">
-              <Footprints size={20} className="text-teal-500" />
+        <View style={s.activityRow}>
+          <View style={s.row}>
+            <View style={s.stepIconBg}>
+              <Footprints size={20} color="#0D9488" />
             </View>
             <View>
-              <Text className="text-xxs font-bold text-slate-400 uppercase">Step Counter</Text>
-              <Text className="text-base font-bold text-slate-800 dark:text-white">{currentSteps} / {stepsGoal}</Text>
+              <Text style={s.activityLabel}>Step Counter</Text>
+              <Text style={s.activityValue}>{currentSteps} / {stepsGoal}</Text>
             </View>
           </View>
-          <View className="items-end">
-            <Text className="text-xxs font-bold text-slate-400 uppercase">Target</Text>
-            <Text className="text-xs font-semibold text-slate-500 dark:text-slate-400">{progressPercent}% done</Text>
+          <View style={s.alignEnd}>
+            <Text style={s.activityLabel}>Target</Text>
+            <Text style={s.activityPercent}>{progressPercent}% done</Text>
           </View>
         </View>
 
         {/* Progress bar */}
-        <View className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-4">
-          <View className="h-full bg-teal-500 rounded-full" style={{ width: `${progressPercent}%` }} />
+        <View style={s.progressBg}>
+          <View style={[s.progressFill, { width: `${progressPercent}%` }]} />
         </View>
 
-        <View className="flex-row justify-between border-t border-slate-100 dark:border-slate-800/80 pt-4">
-          <View className="items-center flex-1">
-            <Text className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">Active Time</Text>
-            <Text className="text-base font-bold text-slate-800 dark:text-white">24 min</Text>
+        <View style={s.metricsRow}>
+          <View style={s.metricItem}>
+            <Text style={s.metricLabel}>Active Time</Text>
+            <Text style={s.metricValue}>24 min</Text>
           </View>
-          <View className="items-center flex-1 border-x border-slate-100 dark:border-slate-800/80">
-            <Text className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">Calories</Text>
-            <Text className="text-base font-bold text-slate-800 dark:text-white">180 kcal</Text>
+          <View style={s.metricItemBorder}>
+            <Text style={s.metricLabel}>Calories</Text>
+            <Text style={s.metricValue}>180 kcal</Text>
           </View>
-          <View className="items-center flex-1">
-            <Text className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">Vitals Level</Text>
-            <Text className="text-base font-bold text-slate-800 dark:text-white">Normal</Text>
+          <View style={s.metricItem}>
+            <Text style={s.metricLabel}>Vitals Level</Text>
+            <Text style={s.metricValue}>Normal</Text>
           </View>
         </View>
       </Card>
 
       {/* Simulator Tools Controls panel if Developer Sandbox */}
       {isSimulatorMode && isConnected && (
-        <Card className="border-teal-500/20 bg-teal-500/5 dark:bg-teal-500/10 mb-6">
-          <View className="flex-row items-center mb-3">
-            <AlertTriangle size={18} className="text-teal-600 dark:text-teal-400 mr-2" />
-            <Text className="text-sm font-bold text-teal-600 dark:text-teal-400">Simulator Sandbox Tools</Text>
+        <Card style={s.simulatorCard} accentBorder>
+          <View style={s.simulatorHeader}>
+            <AlertTriangle size={18} color="#0D9488" style={s.mr2} />
+            <Text style={s.simulatorTitle}>Simulator Sandbox Tools</Text>
           </View>
-          <Text className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-4">
+          <Text style={s.simulatorDesc}>
             Simulate a high-impact fall vector (accelerometer spikes) from the ESP32 smartwatch. This will launch the global alert modal.
           </Text>
           <Button
@@ -176,3 +176,159 @@ export default function DashboardScreen() {
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    color: '#64748B',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  switchPatientBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(13,148,136,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(13,148,136,0.2)',
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  switchPatientText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0D9488',
+    textTransform: 'uppercase',
+    marginRight: 4,
+  },
+  ringCard: { alignItems: 'center', paddingVertical: 24, marginBottom: 16 },
+  ringRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  vitalsCol: { gap: 8 },
+  vitalLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    color: '#64748B',
+  },
+  vitalStatus: { fontSize: 16, fontWeight: '800' },
+  textEmerald: { color: '#10B981' },
+  textSlate: { color: '#94A3B8' },
+  vitalValue: { fontSize: 12, fontWeight: '600', color: '#CBD5E1' },
+  mb4: { marginBottom: 16 },
+  mr2: { marginRight: 8 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  alignEnd: { alignItems: 'flex-end' },
+  emergencyBtn: {
+    backgroundColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
+    borderRadius: 24,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  emergencyIconBg: {
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 16,
+    marginRight: 16,
+  },
+  emergencyTitle: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
+  emergencySubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
+  emergencyArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 },
+  activityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  stepIconBg: {
+    padding: 10,
+    backgroundColor: 'rgba(13,148,136,0.05)',
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  activityLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+  },
+  activityValue: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  activityPercent: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
+  progressBg: {
+    height: 8,
+    width: '100%',
+    backgroundColor: '#1E293B',
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#0D9488',
+    borderRadius: 999,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30,41,59,0.8)',
+    paddingTop: 16,
+  },
+  metricItem: { alignItems: 'center', flex: 1 },
+  metricItemBorder: {
+    alignItems: 'center',
+    flex: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(30,41,59,0.8)',
+  },
+  metricLabel: { fontSize: 12, color: '#64748B', marginBottom: 2 },
+  metricValue: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  simulatorCard: {
+    borderColor: 'rgba(13,148,136,0.2)',
+    backgroundColor: 'rgba(13,148,136,0.05)',
+    marginBottom: 24,
+  },
+  simulatorHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  simulatorTitle: { fontSize: 14, fontWeight: '700', color: '#0D9488' },
+  simulatorDesc: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+});

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Alert } from 'react-native';
+import { View, Text, ScrollView, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { firebaseService } from '../../services/firebase';
@@ -64,20 +64,20 @@ export default function ContactSetupScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-900 px-6 py-12 justify-between">
-      <View className="mt-12">
-        <Text className="text-xxs font-extrabold uppercase tracking-widest text-teal-400">Step 3 of 3</Text>
-        <Text className="text-2xl font-extrabold text-white mt-1">Emergency Contacts</Text>
-        <Text className="text-sm text-slate-400 mt-2">
+    <ScrollView contentContainerStyle={s.scrollContent} style={s.scrollView}>
+      <View style={s.topSection}>
+        <Text style={s.stepLabel}>Step 3 of 3</Text>
+        <Text style={s.headerTitle}>Emergency Contacts</Text>
+        <Text style={s.headerSubtitle}>
           {user?.role === 'caregiver'
             ? 'Set up contacts who should receive automatic SMS alerts if emergency fall events arise.'
             : 'Configure your primary caregiver or family member. They will be alerted instantly in a fall event.'}
         </Text>
 
-        <View className="bg-slate-800/40 border border-slate-800 p-5 rounded-2xl mt-8">
-          <View className="flex-row items-center mb-4">
-            <HeartHandshake size={18} className="text-teal-400 mr-2" />
-            <Text className="text-sm font-bold text-white uppercase tracking-wider">Primary Responder</Text>
+        <View style={s.formContainer}>
+          <View style={s.formHeader}>
+            <HeartHandshake size={18} color="#2DD4BF" style={s.mr2} />
+            <Text style={s.formTitle}>Primary Responder</Text>
           </View>
 
           <Input
@@ -104,14 +104,14 @@ export default function ContactSetupScreen() {
         </View>
       </View>
 
-      <View className="space-y-3 mb-6 mt-8">
+      <View style={s.bottomSection}>
         <Button
           title="Save Contact & Finish"
           onPress={handleSaveContact}
           isLoading={isLoading}
           variant="primary"
           size="lg"
-          className="w-full font-bold"
+          style={s.fullWidth}
         />
 
         <Button
@@ -119,9 +119,72 @@ export default function ContactSetupScreen() {
           onPress={handleSkip}
           variant="outline"
           size="md"
-          className="w-full border-slate-800 text-white"
+          style={s.skipBtn}
         />
       </View>
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+    justifyContent: 'space-between',
+  },
+  topSection: { marginTop: 48 },
+  stepLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    color: '#2DD4BF',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginTop: 8,
+  },
+  formContainer: {
+    backgroundColor: 'rgba(30,41,59,0.4)',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 20,
+    borderRadius: 16,
+    marginTop: 32,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  formTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  mr2: { marginRight: 8 },
+  bottomSection: {
+    gap: 12,
+    marginBottom: 24,
+    marginTop: 32,
+  },
+  fullWidth: { width: '100%' },
+  skipBtn: {
+    width: '100%',
+    borderColor: '#1E293B',
+  },
+});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Alert, Share } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, Share, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/authStore';
 import { Card } from '../../../components/ui/Card';
@@ -48,123 +48,123 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* Header */}
-      <View className="mb-6">
-        <Text className="text-xxs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <View style={s.headerContainer}>
+        <Text style={s.headerLabel}>
           Preferences
         </Text>
-        <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">
+        <Text style={s.headerTitle}>
           Settings Console
         </Text>
       </View>
 
       {/* Profile Overview Card */}
-      <Card className="mb-4">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <View className="p-3 bg-teal-500/10 rounded-2xl mr-3.5">
-              <User size={24} className="text-teal-600 dark:text-teal-400" />
+      <Card style={s.mb4}>
+        <View style={s.profileRow}>
+          <View style={s.row}>
+            <View style={s.profileIconBg}>
+              <User size={24} color="#0D9488" />
             </View>
             <View>
-              <Text className="text-base font-bold text-slate-800 dark:text-white">{user?.fullName}</Text>
-              <Text className="text-xs text-slate-400 dark:text-slate-500">{user?.email}</Text>
-              <Text className="text-xxs font-extrabold text-teal-600 dark:text-teal-400 uppercase tracking-widest mt-0.5">{user?.role}</Text>
+              <Text style={s.profileName}>{user?.fullName}</Text>
+              <Text style={s.profileEmail}>{user?.email}</Text>
+              <Text style={s.profileRole}>{user?.role}</Text>
             </View>
           </View>
         </View>
       </Card>
 
       {/* Core Configurations list */}
-      <View className="mb-6">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Application Features</Text>
+      <View style={s.mb6}>
+        <Text style={s.sectionLabel}>Application Features</Text>
         
-        <Card className="p-0 border-slate-100 dark:border-slate-800/80 overflow-hidden">
+        <Card style={s.menuCard}>
           {/* Emergency contacts settings */}
           <Pressable 
             onPress={() => router.push('/contacts')}
-            className="flex-row items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 active:bg-slate-50 dark:active:bg-slate-800/50"
+            style={s.menuItemBorder}
           >
-            <View className="flex-row items-center">
-              <Users size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Emergency Responders</Text>
+            <View style={s.row}>
+              <Users size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Emergency Responders</Text>
             </View>
-            <ChevronRight size={16} className="text-slate-400" />
+            <ChevronRight size={16} color="#94A3B8" />
           </Pressable>
 
           {/* Caregiver Portal (Visible to all or conditional) */}
           <Pressable 
             onPress={() => router.push('/caregiver')}
-            className="flex-row items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 active:bg-slate-50 dark:active:bg-slate-800/50"
+            style={s.menuItemBorder}
           >
-            <View className="flex-row items-center">
-              <UserCog size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Caregiver Dashboard</Text>
+            <View style={s.row}>
+              <UserCog size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Caregiver Dashboard</Text>
             </View>
-            <ChevronRight size={16} className="text-slate-400" />
+            <ChevronRight size={16} color="#94A3B8" />
           </Pressable>
 
           {/* Admin Dashboard */}
           <Pressable 
             onPress={() => router.push('/admin')}
-            className="flex-row items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-800/50"
+            style={s.menuItemLast}
           >
-            <View className="flex-row items-center">
-              <ShieldCheck size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Admin Analytics Hub</Text>
+            <View style={s.row}>
+              <ShieldCheck size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Admin Analytics Hub</Text>
             </View>
-            <ChevronRight size={16} className="text-slate-400" />
+            <ChevronRight size={16} color="#94A3B8" />
           </Pressable>
         </Card>
       </View>
 
       {/* System Preferences */}
-      <View className="mb-6">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">System Preferences</Text>
+      <View style={s.mb6}>
+        <Text style={s.sectionLabel}>System Preferences</Text>
         
-        <Card className="p-0 border-slate-100 dark:border-slate-800/80 overflow-hidden">
+        <Card style={s.menuCard}>
           
-          <Pressable className="flex-row items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-            <View className="flex-row items-center">
-              <Bell size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Alert Preferences</Text>
+          <Pressable style={s.menuItemBorder}>
+            <View style={s.row}>
+              <Bell size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Alert Preferences</Text>
             </View>
-            <Text className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase mr-1">SMS & Push</Text>
+            <Text style={s.menuItemValue}>SMS & Push</Text>
           </Pressable>
 
-          <Pressable className="flex-row items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-            <View className="flex-row items-center">
-              <Languages size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Language Selection</Text>
+          <Pressable style={s.menuItemBorder}>
+            <View style={s.row}>
+              <Languages size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Language Selection</Text>
             </View>
-            <Text className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase mr-1">English (US)</Text>
+            <Text style={s.menuItemValue}>English (US)</Text>
           </Pressable>
 
           <Pressable 
             onPress={handleDataExport}
-            className="flex-row items-center justify-between p-4"
+            style={s.menuItemLast}
           >
-            <View className="flex-row items-center">
-              <Download size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-800 dark:text-white">Data Privacy Archives</Text>
+            <View style={s.row}>
+              <Download size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemText}>Data Privacy Archives</Text>
             </View>
-            <ChevronRight size={16} className="text-slate-400" />
+            <ChevronRight size={16} color="#94A3B8" />
           </Pressable>
         </Card>
       </View>
 
       {/* Privacy and Policies links */}
-      <View className="mb-8">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Privacy & Support</Text>
-        <Card className="p-0 border-slate-100 dark:border-slate-800/80 overflow-hidden">
+      <View style={s.mb8}>
+        <Text style={s.sectionLabel}>Privacy & Support</Text>
+        <Card style={s.menuCard}>
           <Pressable 
             onPress={() => Alert.alert('Privacy Policy', 'Full medical HIPAA data safety terms and conditions.')}
-            className="flex-row items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800"
+            style={s.menuItemLast}
           >
-            <View className="flex-row items-center">
-              <FileText size={18} className="text-slate-600 dark:text-slate-400 mr-3" />
-              <Text className="text-sm font-bold text-slate-700 dark:text-slate-300">Privacy Policy terms</Text>
+            <View style={s.row}>
+              <FileText size={18} color="#94A3B8" style={s.mr3} />
+              <Text style={s.menuItemTextLight}>Privacy Policy terms</Text>
             </View>
           </Pressable>
         </Card>
@@ -176,9 +176,92 @@ export default function SettingsScreen() {
         onPress={handleLogout}
         variant="danger"
         size="lg"
-        className="w-full mb-10"
+        style={s.logoutBtn}
       />
 
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  headerContainer: { marginBottom: 24 },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    color: '#64748B',
+  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  mb4: { marginBottom: 16 },
+  mb6: { marginBottom: 24 },
+  mb8: { marginBottom: 32 },
+  mr3: { marginRight: 12 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  profileIconBg: {
+    padding: 12,
+    backgroundColor: 'rgba(13,148,136,0.1)',
+    borderRadius: 16,
+    marginRight: 14,
+  },
+  profileName: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  profileEmail: { fontSize: 12, color: '#64748B' },
+  profileRole: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0D9488',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginTop: 2,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  menuCard: {
+    padding: 0,
+    borderColor: '#1E293B',
+    overflow: 'hidden',
+  },
+  menuItemBorder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+  },
+  menuItemLast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  menuItemText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  menuItemTextLight: { fontSize: 14, fontWeight: '700', color: '#CBD5E1' },
+  menuItemValue: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginRight: 4,
+  },
+  logoutBtn: { width: '100%', marginBottom: 40 },
+});

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator, Linking, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/authStore';
 import { firebaseService } from '../../../services/firebase';
@@ -105,27 +105,27 @@ export default function ContactsScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-slate-50 dark:bg-slate-950 px-5 pt-14 pb-10">
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
       
       {/* Back link */}
       <Pressable 
         onPress={() => router.replace('/(app)/(tabs)/settings')} 
-        className="flex-row items-center mb-4 self-start"
+        style={s.backBtn}
       >
-        <ChevronLeft size={20} className="text-slate-400 mr-1" />
-        <Text className="text-sm font-semibold text-slate-400">Settings</Text>
+        <ChevronLeft size={20} color="#94A3B8" style={s.mr1} />
+        <Text style={s.backText}>Settings</Text>
       </Pressable>
 
-      <View className="mb-6">
-        <Text className="text-2xl font-extrabold text-slate-800 dark:text-white">Emergency Contacts</Text>
-        <Text className="text-sm text-slate-400 dark:text-slate-500 mt-1">Configure priorities and quick-response hotkeys</Text>
+      <View style={s.mb6}>
+        <Text style={s.headerTitle}>Emergency Contacts</Text>
+        <Text style={s.headerSubtitle}>Configure priorities and quick-response hotkeys</Text>
       </View>
 
       {/* Add Responder Form */}
-      <Card className="mb-6">
-        <View className="flex-row items-center mb-4">
-          <Plus size={18} className="text-teal-600 dark:text-teal-400 mr-2" />
-          <Text className="text-sm font-bold text-slate-800 dark:text-white">Add New Responder</Text>
+      <Card style={s.mb6}>
+        <View style={s.formHeader}>
+          <Plus size={18} color="#0D9488" style={s.mr2} />
+          <Text style={s.formTitle}>Add New Responder</Text>
         </View>
 
         <Input
@@ -156,61 +156,61 @@ export default function ContactsScreen() {
           isLoading={isSaving}
           variant="primary"
           size="md"
-          className="w-full mt-2"
+          style={s.saveBtn}
         />
       </Card>
 
       {/* Responders List */}
-      <View className="mb-6">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">Priority Order List</Text>
+      <View style={s.mb6}>
+        <Text style={s.sectionLabel}>Priority Order List</Text>
         
         {isLoading ? (
-          <ActivityIndicator size="small" color="#0D9488" className="my-6" />
+          <ActivityIndicator size="small" color="#0D9488" style={s.loader} />
         ) : contacts.length > 0 ? (
           contacts.map((contact, index) => (
-            <Card key={contact.contactId} className="mb-3 border-slate-100 dark:border-slate-800/80 p-4">
-              <View className="flex-row items-start justify-between mb-3">
-                <View className="flex-row items-center">
-                  <View className="w-6 h-6 rounded-full bg-teal-500/10 border border-teal-500/20 items-center justify-center mr-2.5">
-                    <Text className="text-xxs font-extrabold text-teal-600 dark:text-teal-400">{index + 1}</Text>
+            <Card key={contact.contactId} style={s.contactCard}>
+              <View style={s.contactHeader}>
+                <View style={s.row}>
+                  <View style={s.priorityBadge}>
+                    <Text style={s.priorityText}>{index + 1}</Text>
                   </View>
                   <View>
-                    <Text className="text-sm font-bold text-slate-800 dark:text-white">{contact.name}</Text>
-                    <Text className="text-xxs text-slate-400 dark:text-slate-500 font-semibold">{contact.relationship}</Text>
-                    <Text className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{contact.phone}</Text>
+                    <Text style={s.contactName}>{contact.name}</Text>
+                    <Text style={s.contactRelation}>{contact.relationship}</Text>
+                    <Text style={s.contactPhone}>{contact.phone}</Text>
                   </View>
                 </View>
                 
-                <Pressable onPress={() => handleDelete(contact.contactId)} className="p-2">
-                  <Trash2 size={16} className="text-red-400 active:text-red-500" />
+                <Pressable onPress={() => handleDelete(contact.contactId)} style={s.deleteBtn}>
+                  <Trash2 size={16} color="#F87171" />
                 </Pressable>
               </View>
 
               {/* Direct call / sms shortcuts */}
-              <View className="flex-row gap-2.5 border-t border-slate-50 dark:border-slate-850 pt-3">
+              <View style={s.actionRow}>
                 <Pressable 
                   onPress={() => makePhoneCall(contact.phone)}
-                  className="flex-1 py-2 bg-slate-100 active:bg-slate-200 dark:bg-slate-800 dark:active:bg-slate-700 rounded-xl flex-row items-center justify-center"
+                  style={s.actionBtn}
                 >
-                  <Phone size={14} className="text-slate-600 dark:text-slate-300 mr-1.5" />
-                  <Text className="text-xs font-bold text-slate-600 dark:text-slate-350">Quick Call</Text>
+                  <Phone size={14} color="#CBD5E1" style={s.mr1p5} />
+                  <Text style={s.actionText}>Quick Call</Text>
                 </Pressable>
                 
                 <Pressable 
                   onPress={() => sendSMSMessage(contact.phone)}
-                  className="flex-1 py-2 bg-slate-100 active:bg-slate-200 dark:bg-slate-800 dark:active:bg-slate-700 rounded-xl flex-row items-center justify-center"
+                  style={s.actionBtn}
                 >
-                  <MessageSquare size={14} className="text-slate-600 dark:text-slate-300 mr-1.5" />
-                  <Text className="text-xs font-bold text-slate-600 dark:text-slate-350">Quick SMS</Text>
+                  <MessageSquare size={14} color="#CBD5E1" style={s.mr1p5} />
+                  <Text style={s.actionText}>Quick SMS</Text>
                 </Pressable>
               </View>
             </Card>
           ))
         ) : (
-          <Card className="items-center py-8">
-            <Heart size={38} className="text-slate-300 dark:text-slate-600 mb-3" />
-            <Text className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">No emergency contacts listed</Text>
-            <Text className="text-xs text-slate-400 dark:text-slate-500 text-center px-6 leading-4.5">
+          <Card style={s.emptyCard}>
+            <Heart size={38} color="#475569" style={s.mb3} />
+            <Text style={s.emptyTitle}>No emergency contacts listed</Text>
+            <Text style={s.emptySubtitle}>
               Fill in the responder details above to configure who should be alerted when fall incidents occur.
             </Text>
           </Card>
@@ -220,3 +220,98 @@ export default function ContactsScreen() {
     </ScrollView>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  backText: { fontSize: 14, fontWeight: '600', color: '#94A3B8' },
+  mr1: { marginRight: 4 },
+  mr1p5: { marginRight: 6 },
+  mr2: { marginRight: 8 },
+  mb3: { marginBottom: 12 },
+  mb6: { marginBottom: 24 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  headerSubtitle: { fontSize: 14, color: '#64748B', marginTop: 4 },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  formTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  saveBtn: { width: '100%', marginTop: 8 },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  loader: { marginVertical: 24 },
+  contactCard: {
+    marginBottom: 12,
+    borderColor: '#1E293B',
+    padding: 16,
+  },
+  contactHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  priorityBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(13,148,136,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(13,148,136,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  priorityText: { fontSize: 10, fontWeight: '800', color: '#0D9488' },
+  contactName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  contactRelation: { fontSize: 10, color: '#64748B', fontWeight: '600' },
+  contactPhone: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  deleteBtn: { padding: 8 },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30,41,59,0.5)',
+    paddingTop: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
+  emptyCard: { alignItems: 'center', paddingVertical: 32 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    lineHeight: 18,
+  },
+});
