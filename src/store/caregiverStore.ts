@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { Incident, isOpen } from '../emergency/incidentMachine';
 import { firebaseService } from '../services/firebase';
 import { describeFirebaseError } from '../services/firebaseApp';
+import { resilientSubscription } from '../services/resilientSubscription';
 import { CloudDeviceStatus } from '../types';
 
 interface CaregiverStore {
@@ -35,12 +36,30 @@ export const useCaregiverStore = create<CaregiverStore>((set) => {
         if (subs.has(id)) continue;
         const onError = (e: Error) => set((s) => ({ errors: { ...s.errors, [id]: describeFirebaseError(e) }, loaded: { ...s.loaded, [id]: true } }));
         subs.set(id, [
-          firebaseService.subscribeAlertsFor(
-            id,
-            (alerts) => set((s) => ({ alertsByElder: { ...s.alertsByElder, [id]: alerts }, loaded: { ...s.loaded, [id]: true }, errors: { ...s.errors, [id]: '' } })),
+          resilientSubscription(
+            (fail, ok) =>
+              firebaseService.subscribeAlertsFor(
+                id,
+                (alerts) => {
+                  ok();
+                  set((s) => ({ alertsByElder: { ...s.alertsByElder, [id]: alerts }, loaded: { ...s.loaded, [id]: true }, errors: { ...s.errors, [id]: '' } }));
+                },
+                fail,
+              ),
             onError,
           ),
-          firebaseService.subscribeDeviceStatus(id, (devices) => set((s) => ({ devicesByElder: { ...s.devicesByElder, [id]: devices } })), onError),
+          resilientSubscription(
+            (fail, ok) =>
+              firebaseService.subscribeDeviceStatus(
+                id,
+                (devices) => {
+                  ok();
+                  set((s) => ({ devicesByElder: { ...s.devicesByElder, [id]: devices } }));
+                },
+                fail,
+              ),
+            onError,
+          ),
         ]);
       }
     },

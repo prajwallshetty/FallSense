@@ -8,7 +8,8 @@ Legend: ✅ run and passing in this change · ⬜ must be run by you (needs hard
 |---|---|---|
 | TypeScript | `npm run ts:check` | ✅ 0 errors |
 | ESLint (eslint-config-expo) | `npm run lint` | ✅ 0 problems |
-| Jest unit/integration (9 suites) | `npm test` | ✅ 98 tests |
+| Jest unit/integration (10 suites) | `npm test` | ✅ 108 tests |
+| Web end-to-end flow (Chromium + Firebase emulators, **simulator, not hardware**) | `npm run test:e2e:web` (see e2e/README.md) | ✅ 15 steps, 0 console errors |
 | Firestore rules (emulator) | `cd firestore-tests && npm test` | ✅ 31 tests |
 | Cloud Function compiles | `cd functions && npm run build` | ✅ |
 | Firmware host tests (encoders, fall detector) | `g++ -std=c++17 -Ifirmware/safefall_watch firmware/test/host_test.cpp -o host_test && ./host_test` | ✅ |
@@ -20,6 +21,7 @@ What the Jest suites cover:
 * **BLE parsing** (`protocol.test.ts`): units and endianness, base64, short/oversized packets,
   wrong version or type, unknown enums, reserved id 0, command encoding, plus golden vectors
   from the firmware's C++ encoder.
+* **BLE lifecycle** (`bleLifecycle.test.ts`, `connectionManager.test.ts`): bounded reconnect (gives up, then a fresh round on foreground); telemetry paused in background; event age from the watch uptime clock; adapter "unknown" waited out; resilient Firestore resubscription; late-event notes.
 * **Connection manager** (`connectionManager.test.ts`): GATT validation; non-SafeFall device
   rejection; malformed packets don't drop the link; reconnect with backoff; subscription cleanup;
   stale-data detection and forced reconnect; Bluetooth off/on; late callbacks from old
@@ -70,6 +72,11 @@ flashed with `firmware/safefall_watch`.
 - [ ] Live motion shows ~1.00 g at rest.
 - [ ] Walk out of range → "Reconnecting…" with retry countdown → reconnects automatically.
 - [ ] Turn Bluetooth off → "Bluetooth is off"; on → reconnects.
+- [ ] Search with Bluetooth off → "Bluetooth is turned off" card with **Open Bluetooth settings**.
+- [ ] Search with location services off and no watch found → location hint card.
+- [ ] Leave the watch off for ~5 min → status ends at **Disconnected** ("Could not reconnect after 12 attempts"); switch the watch on and reopen the app → reconnects.
+- [ ] Background the app with live motion open → telemetry stops (status flag), and resumes in the foreground.
+- [ ] Trigger SOS on the watch with the phone out of range for >1 min, then reconnect → alert shows "delivered late".
 - [ ] Power the watch off for >45 s → stale → reconnect attempts; dashboard says alerts can't
   reach the phone.
 

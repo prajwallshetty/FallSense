@@ -51,3 +51,4 @@ functions/node_modules/
 firestore-tests/node_modules/
 coverage/
 .firebaserc
+e2e/artifacts/

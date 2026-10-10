@@ -48,3 +48,31 @@ BatteryRing), and the original service UUID base `4FA1xxxx-C4C2-4C2E-9D19-9B92A2
 which became the base for the versioned protocol.
 
 See `README.md` for how each finding was resolved.
+
+---
+
+# Runtime audit, round 2 (after PR #1)
+
+Method: the app's real JavaScript was run in Chromium (Expo web) against the Firebase Auth and
+Firestore emulators and driven end to end with Playwright (`e2e/`), in addition to static review
+of the BLE code paths. Web has no BLE stack, which also reproduces the Expo Go situation.
+
+| # | Severity | Where | Confirmed issue | Fix |
+|---|----------|-------|-----------------|-----|
+| R1 | Critical | `src/services/firebase.ts`, `src/store/caregiverStore.ts` | **Caregivers never saw alerts after linking.** The relations listener reported the relation while it was still a pending local write; the app then subscribed to the elder's alerts before the server could see the relation, got `permission-denied`, and Firestore listeners stop permanently after an error. The UI showed "You do not have permission to do that" until an app restart. | Relations with pending writes are ignored, and caregiver listeners resubscribe with bounded backoff (`resilientSubscription.ts`). E2E-verified without reload. |
+| R2 | High (web) | `babel.config.js` | `npm run web` showed a **blank screen**: `Cannot use 'import.meta' outside a module` from zustand's ESM build. Native was not affected: the Android bundle has no `import.meta`. | Enabled babel-preset-expo `unstable_transformImportMeta`. |
+| R3 | Medium (web) | `package.json` | `web` script present but `react-native-web` missing. | Added `react-native-web@~0.21.0` (SDK 54 version). |
+| R4 | Medium (web) | all confirm dialogs | react-native-web's `Alert.alert` is a no-op, so SOS confirmation, resolve, remove watch and sign out did nothing on web. | `src/utils/webAlertPolyfill.ts` (web only). |
+| R5 | High | `src/app/(app)/(tabs)/devices.tsx` | With dev tools enabled, the "Bluetooth not available in this build (Expo Go)" reason was hidden; users only saw the simulator and no explanation why their real watch never appeared. | Reason always shown. |
+| R6 | High | `src/ble/connectionManager.ts` | Reconnection retried forever (unbounded). | Bounded to 12 attempts (~4.5 min), then Disconnected with reason; a fresh round on app foreground, Bluetooth on, or Reconnect. |
+| R7 | High | `src/services/bleService.ts` | Scanning started without checking the adapter: Bluetooth off or the transient "unknown" state gave raw native errors or empty scans. | Waits for the adapter state, then shows plain messages with a Bluetooth/app-settings shortcut. |
+| R8 | Medium | `src/services/bleService.ts` | No app lifecycle handling for BLE. | Telemetry paused in background; foreground restores it and reconnects if the link was given up; scan stopped in background. |
+| R9 | Medium | `connectionManager.ts`, `bleService.ts` | Events read from the watch on reconnect were always treated as new, even if hours old (e.g. after reinstalling the app). | Event age from the watch's uptime clock: events >60 min old are ACKed and logged but not alarmed; events ≥1 min old are flagged "delivered late" on the incident and alert screen. |
+| R10 | Medium | Watch tab | An empty scan on Android with location services off had no explanation. | Detected after the scan, with a hint and a location-settings shortcut. |
+| R11 | Low | `LinkingPanels.tsx` | After a caregiver redeemed a code, the elder's screen still showed it as valid. | The code document is watched; the panel shows "Your code was used". |
+| R12 | Low | tabs | Disconnected state only visible on Home. | "!" badge on the Watch tab while a paired watch is not connected or stale. |
+
+**Firmware protocol gaps (not invented by the app):** the firmware sends no fall **confidence**
+score (only peak acceleration), no absolute **timestamp** (only uptime; the app uses phone receive
+time plus the uptime-based age), and no **charging** detection (flag always 0, so the app does not
+display charging state).

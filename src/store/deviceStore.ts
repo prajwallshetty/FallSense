@@ -8,6 +8,9 @@ import type { LinkStatus } from '../ble/connectionManager';
 import type { DeviceState, TelemetryPacket } from '../ble/protocol';
 import type { ScannedPeripheral } from '../ble/transport';
 
+/** Why a scan cannot find the watch, when the app can tell. */
+export type ScanBlocker = 'bluetooth_off' | 'unauthorized' | 'unsupported' | 'location_off' | null;
+
 export interface PairedDevice {
   deviceId: string;
   name: string;
@@ -45,6 +48,7 @@ interface DeviceStore {
   scanning: boolean;
   scanResults: ScannedPeripheral[];
   scanError: string | null;
+  scanBlocker: ScanBlocker;
 
   setPaired: (p: PairedDevice | null) => void;
   patch: (p: Partial<Omit<DeviceStore, 'setPaired' | 'patch' | 'resetLive' | 'addScanResult'>>) => void;
@@ -78,6 +82,7 @@ export const useDeviceStore = create<DeviceStore>()(
       scanning: false,
       scanResults: [],
       scanError: null,
+      scanBlocker: null,
 
       setPaired: (paired) => set({ paired }),
       patch: (p) => set(p),

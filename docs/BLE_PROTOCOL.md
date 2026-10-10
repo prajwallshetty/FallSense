@@ -121,7 +121,8 @@ The app shows "unknown" rather than a number when the watch reports `0xFF`.
 | Status heartbeat | every 5 s |
 | App marks data stale | 15 s without any packet |
 | App forces reconnect | 45 s without any packet |
-| App reconnect backoff | 1, 2, 5, 10, 20, 30 s (then every 30 s) |
+| App reconnect backoff | 1, 2, 5, 10, 20, 30 s, then 30 s steps; **bounded to 12 attempts** (~4.5 min), then Disconnected until app foreground / Bluetooth on / Reconnect |
+| Event age | `watchUptimeNow − event.uptimeMs` (watch uptime extrapolated from the last status heartbeat). ≥1 min: incident marked "delivered late"; >60 min: ACKed and logged, no alarm |
 | Connect timeout | 15 s |
 | Event retransmit | every 2 s, for up to 10 min |
 | App countdown | `EXPO_PUBLIC_FALL_COUNTDOWN_SECONDS` (default 30 s) |
@@ -136,6 +137,14 @@ The app shows "unknown" rather than a number when the watch reports `0xFF`.
   encrypts the link but does not protect against an active man-in-the-middle during the first
   pairing. **Firmware TODO:** show a 6-digit passkey on the GC9A01 (`ESP_IO_CAP_OUT`).
 * The watch accepts a single connection; advertising resumes on disconnect.
+
+## Not provided by firmware v1
+
+The app does not invent these fields. If they are needed, they must be added to the firmware (and a protocol version bump):
+
+* **Fall confidence score:** only `peakAccel` is sent.
+* **Absolute timestamps:** only watch uptime is sent; the app records phone receive time and derives event age from uptime.
+* **Charging state:** the flag exists but the reference firmware never sets it (no charge-detect pin wired), so the app does not display charging.
 
 ## Firmware implementation status
 

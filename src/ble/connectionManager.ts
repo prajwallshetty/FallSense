@@ -44,7 +44,12 @@ export interface ConnectionSink {
   onStatus(status: StatusPacket): void;
   onBatteryLevel(percent: number): void;
   onTelemetry(t: TelemetryPacket): void;
-  onEvent(e: EventPacket): void;
+  /**
+   * `ageMs` is how long ago the watch raised the event, derived from the watch's uptime clock
+   * (null when unknown). Events read on (re)connect can be old: the watch keeps its latest event
+   * readable, so the sink decides whether it is still actionable.
+   */
+  onEvent(e: EventPacket, meta: { source: 'notify' | 'read'; ageMs: number | null }): void;
   onStale(isStale: boolean, lastPacketAt: number | null): void;
   onProtocolError(message: string): void;
 }
@@ -56,6 +61,8 @@ export interface ManagerOptions {
   /** No packet for this long forces a reconnect. */
   reconnectIfSilentMs: number;
   backoffMs: number[];
+  /** Automatic reconnection gives up after this many consecutive failed attempts. */
+  maxReconnectAttempts: number;
   watchdogIntervalMs: number;
 }
 
@@ -64,6 +71,9 @@ export const DEFAULT_MANAGER_OPTIONS: ManagerOptions = {
   staleAfterMs: 15_000,
   reconnectIfSilentMs: 45_000,
   backoffMs: [1_000, 2_000, 5_000, 10_000, 20_000, 30_000],
+  // ~4.5 minutes of attempts. Afterwards the link shows Disconnected; returning to the app,
+  // Bluetooth turning on, or tapping Reconnect starts a fresh round.
+  maxReconnectAttempts: 12,
   watchdogIntervalMs: 5_000,
 };
 
@@ -109,6 +119,9 @@ export class ConnectionManager {
   private commandChain: Promise<unknown> = Promise.resolve();
   private telemetryWanted = false;
   private hasTelemetry = false;
+  private appActive = true;
+  /** Latest watch uptime from a status packet, with the phone time it was received. */
+  private watchClock: { uptimeMs: number; at: number } | null = null;
 
   constructor(
     readonly transport: BleTransport,
@@ -187,9 +200,38 @@ export class ConnectionManager {
   /** Telemetry costs watch battery; the app enables it only while the dashboard is visible. */
   setTelemetryEnabled(enabled: boolean): void {
     this.telemetryWanted = enabled;
-    if (this.status === 'connected' && this.hasTelemetry) {
-      this.sendCommand(CommandCode.SetTelemetry, 0, enabled ? 1 : 0).catch(() => undefined);
+    this.syncTelemetry();
+  }
+
+  /**
+   * App moved to background/foreground. In background, telemetry is paused (it only feeds the
+   * dashboard) while events and status keep flowing. Coming back resets the reconnect budget and
+   * reconnects if the link was given up.
+   */
+  setAppActive(active: boolean): void {
+    if (this.appActive === active) return;
+    this.appActive = active;
+    this.syncTelemetry();
+    if (active && this.deviceId && this.autoReconnect && (this.status === 'disconnected' || this.status === 'error')) {
+      this.attempt = 0;
+      this.tryConnect(true);
     }
+  }
+
+  private syncTelemetry() {
+    if (this.status === 'connected' && this.hasTelemetry) {
+      this.sendCommand(CommandCode.SetTelemetry, 0, this.telemetryWanted && this.appActive ? 1 : 0).catch(() => undefined);
+    }
+  }
+
+  /** Estimated age of an event, using the watch's own uptime clock. */
+  eventAgeMs(e: EventPacket): number | null {
+    if (!this.watchClock) return null;
+    // Extrapolate the watch's current uptime from its last status heartbeat.
+    const watchNow = this.watchClock.uptimeMs + (this.now() - this.watchClock.at);
+    // An event "from the future" means the clocks disagree (e.g. a reboot we have not seen yet).
+    if (e.uptimeMs > watchNow + 10_000) return null;
+    return Math.max(0, watchNow - e.uptimeMs);
   }
 
   // ---------------------------------------------------------------------------------------
@@ -222,6 +264,7 @@ export class ConnectionManager {
     if (!id) return;
     const gen = ++this.generation;
     this.teardown();
+    this.watchClock = null;
     this.setStatus(isRetry ? 'reconnecting' : 'connecting', {});
     try {
       const { name } = await this.transport.connect(id, this.opts.connectTimeoutMs);
@@ -234,8 +277,11 @@ export class ConnectionManager {
       if (gen !== this.generation) return;
 
       this.subs.push(this.transport.onDisconnected(id, (err) => this.handleLinkLoss(gen, err)));
-      this.subscribe(id, gen, EVENT_CHAR_UUID, (b) => this.sink.onEvent(parseEvent(b)));
-      this.subscribe(id, gen, STATUS_CHAR_UUID, (b) => this.sink.onStatus(parseStatus(b)));
+      this.subscribe(id, gen, EVENT_CHAR_UUID, (b) => {
+        const e = parseEvent(b);
+        this.sink.onEvent(e, { source: 'notify', ageMs: this.eventAgeMs(e) });
+      });
+      this.subscribe(id, gen, STATUS_CHAR_UUID, (b) => this.handleStatus(parseStatus(b)));
       if (caps.hasTelemetry) this.subscribe(id, gen, TELEMETRY_CHAR_UUID, (b) => this.sink.onTelemetry(parseTelemetry(b)));
       if (caps.hasBattery) {
         this.subs.push(
@@ -263,14 +309,17 @@ export class ConnectionManager {
 
       // Initial reads: current status, and any event the watch raised while disconnected
       // (the firmware keeps the latest unacknowledged event readable).
-      await this.readAndDispatch(id, gen, STATUS_CHAR_UUID, (b) => this.sink.onStatus(parseStatus(b)));
-      await this.readAndDispatch(id, gen, EVENT_CHAR_UUID, (b) => this.sink.onEvent(parseEvent(b)));
+      await this.readAndDispatch(id, gen, STATUS_CHAR_UUID, (b) => this.handleStatus(parseStatus(b)));
+      await this.readAndDispatch(id, gen, EVENT_CHAR_UUID, (b) => {
+        const e = parseEvent(b);
+        this.sink.onEvent(e, { source: 'read', ageMs: this.eventAgeMs(e) });
+      });
       if (caps.hasBattery) {
         const v = await this.transport.read(id, BATTERY_SERVICE_UUID, BATTERY_LEVEL_CHAR_UUID).catch(() => null);
         const pct = v ? parseBatteryLevel(v) : null;
         if (gen === this.generation && pct != null) this.sink.onBatteryLevel(pct);
       }
-      if (caps.hasTelemetry) this.setTelemetryEnabled(this.telemetryWanted);
+      if (caps.hasTelemetry) this.syncTelemetry();
     } catch (e) {
       if (gen !== this.generation) return;
       this.teardown();
@@ -283,6 +332,12 @@ export class ConnectionManager {
         this.setStatus('error', { error: message });
       }
     }
+  }
+
+  private handleStatus(st: StatusPacket) {
+    // A smaller uptime than before means the watch rebooted; the clock simply restarts.
+    this.watchClock = { uptimeMs: st.uptimeMs, at: this.now() };
+    this.sink.onStatus(st);
   }
 
   private subscribe(id: string, gen: number, char: string, handle: (bytes: Uint8Array) => void) {
@@ -368,6 +423,13 @@ export class ConnectionManager {
     this.clearRetry();
     if (this.adapterState === 'powered_off') {
       this.setStatus('bluetooth_off', { error: 'Bluetooth is turned off.' });
+      return;
+    }
+    if (this.attempt >= this.opts.maxReconnectAttempts) {
+      this.setStatus('disconnected', {
+        error: `Could not reconnect after ${this.opts.maxReconnectAttempts} attempts (${error}). Make sure the watch is switched on and near the phone, then tap Reconnect.`,
+        nextRetryAt: null,
+      });
       return;
     }
     const delays = this.opts.backoffMs;

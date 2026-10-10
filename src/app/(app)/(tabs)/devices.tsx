@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Bluetooth, Watch } from 'lucide-react-native';
 import { useDeviceStore } from '../../../store/deviceStore';
 import { useAuthStore } from '../../../store/authStore';
@@ -42,6 +42,15 @@ function ScanResult({ p, onPair, busy }: { p: ScannedPeripheral; onPair: () => v
       <Button title={busy ? 'Connecting…' : 'Connect'} onPress={onPair} isLoading={busy} variant={p.looksLikeSafeFall ? 'primary' : 'outline'} style={{ marginTop: spacing.md }} />
     </Card>
   );
+}
+
+function openSystemSettings(kind: 'bluetooth' | 'location' | 'app') {
+  if (Platform.OS === 'android' && kind !== 'app') {
+    const action = kind === 'bluetooth' ? 'android.settings.BLUETOOTH_SETTINGS' : 'android.settings.LOCATION_SOURCE_SETTINGS';
+    Linking.sendIntent(action).catch(() => Linking.openSettings());
+  } else {
+    Linking.openSettings().catch(() => undefined);
+  }
 }
 
 function ElderlyDevices() {
@@ -109,14 +118,36 @@ function ElderlyDevices() {
 
   return (
     <Screen title="Pair your watch" subtitle="Turn on your SafeFall watch and keep it close to this phone." inTabs>
-      {unavailable && !bleService.simulatorEnabled ? <ErrorBanner message={unavailable} /> : null}
+      {unavailable ? (
+        <ErrorBanner
+          message={
+            bleService.simulatorEnabled
+              ? `${unavailable} Only the developer simulator can be found in this build.`
+              : unavailable
+          }
+        />
+      ) : null}
       {perm && !perm.granted && perm.message ? (
         <Card tone="warning">
           <Text style={type.body}>{perm.message}</Text>
           {perm.blocked ? <Button title="Open phone settings" variant="outline" onPress={() => Linking.openSettings()} style={{ marginTop: spacing.md }} /> : null}
         </Card>
       ) : null}
-      {d.scanError ? <ErrorBanner message={d.scanError} onRetry={scan} /> : null}
+      {d.scanBlocker ? (
+        <Card tone="warning">
+          <Text style={type.body}>{d.scanError}</Text>
+          {d.scanBlocker !== 'unsupported' ? (
+            <Button
+              title={d.scanBlocker === 'bluetooth_off' ? 'Open Bluetooth settings' : d.scanBlocker === 'location_off' ? 'Open location settings' : 'Open app settings'}
+              variant="outline"
+              onPress={() => openSystemSettings(d.scanBlocker === 'bluetooth_off' ? 'bluetooth' : d.scanBlocker === 'location_off' ? 'location' : 'app')}
+              style={{ marginTop: spacing.md }}
+            />
+          ) : null}
+        </Card>
+      ) : d.scanError ? (
+        <ErrorBanner message={d.scanError} onRetry={scan} />
+      ) : null}
       {pairError ? <ErrorBanner message={pairError} /> : null}
 
       <Button

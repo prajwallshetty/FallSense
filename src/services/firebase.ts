@@ -186,6 +186,11 @@ class FirebaseService {
     return { code, elderlyId: elderly.userId, elderlyName: elderly.fullName, expiresAt };
   }
 
+  /** Reports whether an invite code still exists (it is deleted when a caregiver redeems it). */
+  watchLinkCode(code: string, cb: (exists: boolean) => void): Unsubscribe {
+    return onSnapshot(doc(db(), 'linkCodes', code), (snap) => cb(snap.exists()), () => undefined);
+  }
+
   async revokeLinkCode(code: string): Promise<void> {
     await deleteDoc(doc(db(), 'linkCodes', code));
   }
@@ -220,9 +225,12 @@ class FirebaseService {
     const field = user.role === 'caregiver' ? 'caregiverId' : 'elderlyId';
     return onSnapshot(
       query(collection(db(), 'relations'), where(field, '==', user.userId)),
+      // A relation that only exists as a pending local write (right after redeeming a code) is
+      // not yet visible to security rules; listening to that elder's data now would be denied.
+      { includeMetadataChanges: true },
       (snap) =>
         cb(
-          snap.docs.map((d) => {
+          snap.docs.filter((d) => !d.metadata.hasPendingWrites).map((d) => {
             const v = d.data();
             return {
               relationId: d.id,

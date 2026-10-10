@@ -112,6 +112,8 @@ export const DEFAULT_CONFIG: MachineConfig = {
 export const MAX_HISTORY = 50;
 export const MAX_PROCESSED_KEYS = 500;
 export const MAX_TIMELINE = 60;
+/** Events arriving at least this late get a "delivered late" note on the incident. */
+export const LATE_EVENT_MS = 60_000;
 
 export type Action =
   | {
@@ -121,6 +123,8 @@ export type Action =
       deviceId: string;
       simulated: boolean;
       event: EventPacket;
+      /** Set when the event reached the phone long after the watch raised it (out of range). */
+      lateByMs?: number;
     }
   | { type: 'MANUAL_SOS'; now: number; owner: Owner; id: string }
   | { type: 'TICK'; now: number }
@@ -283,7 +287,11 @@ function handleDeviceEvent(
   a: Extract<Action, { type: 'DEVICE_EVENT' }>,
   cfg: MachineConfig,
 ): Result {
-  const { event, now, owner, deviceId, simulated } = a;
+  const { event, now, owner, deviceId, simulated, lateByMs } = a;
+  const lateNote = (inc: Incident): Incident =>
+    lateByMs && lateByMs >= LATE_EVENT_MS
+      ? addTimeline(inc, { at: now, type: 'delivered_late', detail: `The watch raised this ${Math.round(lateByMs / 60_000)} min before the phone received it` })
+      : inc;
   const key = eventKey(deviceId, event.eventId, event.eventType);
   const ackEffect: Effect = { type: 'device_command', command: 'ack', deviceId, eventId: event.eventId };
 
@@ -318,6 +326,7 @@ function handleDeviceEvent(
         type: 'possible_fall',
         by: 'watch',
       });
+      inc = lateNote(inc);
       next = place(next, inc);
       effects.push({ type: 'capture_location', incidentId: id }, { type: 'notify', incidentId: id, kind: 'possible_fall' }, ...syncEffect(inc));
       return { state: next, effects };
@@ -330,7 +339,7 @@ function handleDeviceEvent(
         if (event.peakAccelG) inc = { ...inc, peakAccelG: Math.max(inc.peakAccelG ?? 0, event.peakAccelG) };
       } else {
         inc = newIncident({ ...base, source: 'wearable', state: 'possible_fall' });
-        inc = toCountdown(inc, now, cfg, 'Fall confirmed by watch');
+        inc = lateNote(toCountdown(inc, now, cfg, 'Fall confirmed by watch'));
         effects.push({ type: 'capture_location', incidentId: id });
       }
       next = place(next, inc);
@@ -361,7 +370,7 @@ function handleDeviceEvent(
     case DeviceEventType.SosButton: {
       if (sameIncident) return { state: next, effects };
       let inc = newIncident({ ...base, source: 'wearable_sos', state: 'escalated' });
-      inc = addTimeline({ ...inc, escalatedAt: now }, { at: now, type: 'sos', by: 'watch_button' });
+      inc = lateNote(addTimeline({ ...inc, escalatedAt: now }, { at: now, type: 'sos', by: 'watch_button' }));
       next = place(next, inc);
       effects.push(
         { type: 'capture_location', incidentId: id },

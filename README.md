@@ -110,6 +110,9 @@ npm run start:dev-client
 ```
 To try the BLE simulator, set `EXPO_PUBLIC_ENABLE_DEV_TOOLS=true` in `.env` and restart Metro.
 
+### Web end-to-end flow (simulator + Firebase emulators, no hardware)
+See [e2e/README.md](e2e/README.md). `npm run web` also works for UI checks, but web, like Expo Go, has no Bluetooth.
+
 ### Firestore rules tests (needs Java 11+)
 ```powershell
 cd firestore-tests; npm install; npm test; cd ..

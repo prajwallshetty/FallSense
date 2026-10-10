@@ -98,7 +98,7 @@ describe('ConnectionManager', () => {
     expect(sink.onStatus).toHaveBeenCalledWith(expect.objectContaining({ batteryPercent: 64 }));
 
     t.emit(EVENT_CHAR_UUID, encodeEvent({ eventId: 5, eventType: DeviceEventType.FallConfirmed, deviceState: DeviceState.FallAlarm, peakAccelG: 3, uptimeMs: 1 }));
-    expect(sink.onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 5 }));
+    expect(sink.onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 5 }), expect.objectContaining({ source: 'notify' }));
     m.destroy();
   });
 
@@ -108,7 +108,7 @@ describe('ConnectionManager', () => {
     const { sink } = makeSink();
     const m = new ConnectionManager(t, sink);
     await m.connect('dev1', { autoReconnect: false });
-    expect(sink.onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 9 }));
+    expect(sink.onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 9 }), { source: 'read', ageMs: null });
     m.destroy();
   });
 
@@ -260,6 +260,62 @@ describe('ConnectionManager', () => {
     // First write is the telemetry on/off sync performed on every connect.
     expect(t.writes.map((w) => w[1])).toEqual([CommandCode.SetTelemetry, CommandCode.AckEvent, CommandCode.CancelAlarm]);
     expect(t.writes[0][6]).toBe(0);
+    m.destroy();
+  });
+
+  it('gives up after the bounded number of reconnect attempts, then retries on foreground', async () => {
+    const t = new FakeTransport();
+    const { sink, statuses } = makeSink();
+    const opts = { ...DEFAULT_MANAGER_OPTIONS, maxReconnectAttempts: 3, backoffMs: [1000] };
+    const m = new ConnectionManager(t, sink, opts);
+    await m.connect('dev1', { autoReconnect: true });
+    t.connectImpl = async () => { throw new Error('out of range'); };
+    t.dropLink();
+    for (let i = 0; i < 5; i++) { jest.advanceTimersByTime(1000); await flush(); }
+    expect(t.connectCalls).toBe(1 + 3);
+    expect(m.currentStatus).toBe('disconnected');
+    expect(sink.onLinkStatus).toHaveBeenLastCalledWith('disconnected', expect.objectContaining({ error: expect.stringMatching(/after 3 attempts/) }));
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(t.connectCalls).toBe(4);
+
+    // Returning to the app starts a fresh round.
+    t.connectImpl = async () => ({ name: 'x' });
+    m.setAppActive(false);
+    m.setAppActive(true);
+    await flush();
+    expect(m.currentStatus).toBe('connected');
+    expect(statuses.filter((s) => s === 'connected')).toHaveLength(2);
+    m.destroy();
+  });
+
+  it('pauses telemetry in the background and restores it in the foreground', async () => {
+    const t = new FakeTransport();
+    const { sink } = makeSink();
+    const m = new ConnectionManager(t, sink);
+    await m.connect('dev1', { autoReconnect: true });
+    m.setTelemetryEnabled(true);
+    m.setAppActive(false);
+    m.setAppActive(true);
+    await flush();
+    const telemetryWrites = t.writes.filter((w) => w[1] === CommandCode.SetTelemetry).map((w) => w[6]);
+    expect(telemetryWrites).toEqual([0, 1, 0, 1]); // connect sync, enable, background, foreground
+    m.destroy();
+  });
+
+  it('computes event age from the watch uptime clock (outdated events read on connect)', async () => {
+    let now = 5_000_000;
+    const t = new FakeTransport();
+    // Watch has been up 2 h; its pending event was raised 90 min ago.
+    t.reads[STATUS_CHAR_UUID] = bytesToBase64(encodeStatus({ deviceState: DeviceState.FallAlarm, batteryPercent: 50, batteryMillivolts: 3800, charging: false, imuOk: true, telemetryEnabled: false, firmwareVersion: '1.0.0', uptimeMs: 7_200_000 }));
+    t.reads[EVENT_CHAR_UUID] = bytesToBase64(encodeEvent({ eventId: 3, eventType: DeviceEventType.FallConfirmed, deviceState: DeviceState.FallAlarm, peakAccelG: 3, uptimeMs: 1_800_000 }));
+    const { sink } = makeSink();
+    const m = new ConnectionManager(t, sink, DEFAULT_MANAGER_OPTIONS, () => now);
+    await m.connect('dev1', { autoReconnect: false });
+    expect(sink.onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 3 }), { source: 'read', ageMs: 5_400_000 });
+    now += 1000;
+    t.emit(EVENT_CHAR_UUID, encodeEvent({ eventId: 4, eventType: DeviceEventType.PossibleFall, deviceState: DeviceState.PossibleFall, peakAccelG: 3, uptimeMs: 7_200_500 }));
+    expect(sink.onEvent).toHaveBeenLastCalledWith(expect.objectContaining({ eventId: 4 }), { source: 'notify', ageMs: 500 });
     m.destroy();
   });
 });
