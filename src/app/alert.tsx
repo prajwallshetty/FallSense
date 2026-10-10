@@ -1,340 +1,210 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, Alert, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAlertStore } from '../store/alertStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ShieldAlert, Phone, MessageSquare, CheckCircle2 } from 'lucide-react-native';
+import { useIncidentStore } from '../store/incidentStore';
 import { useAuthStore } from '../store/authStore';
+import { emergencyService } from '../services/emergencyService';
 import { notificationService } from '../services/notificationService';
+import { callNumber, incidentMessage, textContacts } from '../services/contactActions';
+import { useEmergencyContacts } from '../hooks/useEmergencyContacts';
+import { dispatchSummary, INCIDENT_STATE, sourceLabel } from '../emergency/labels';
+import { isOpen } from '../emergency/incidentMachine';
+import { env } from '../config/env';
+import { formatPhone } from '../utils/validation';
 import { Button } from '../components/ui/Button';
-import { ShieldAlert, MapPin, BellRing } from 'lucide-react-native';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { SimulatedBadge } from '../components/ui/Feedback';
+import { LiveMap } from '../components/Map/LiveMap';
+import { colors, radius, spacing, type } from '../theme';
 
+/**
+ * Full-screen incident view for the wearer's phone.
+ * possible_fall / countdown: cancel or get help now. escalated / acknowledged: contact actions
+ * and resolution. Android back is blocked while an incident is open: closing must be explicit.
+ */
 export default function AlertScreen() {
   const router = useRouter();
-  const { activeAlert, countdown, cancelAlert, acknowledgeAlert } = useAlertStore();
-  const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const incident = useIncidentStore((s) => s.active);
+  const profile = useAuthStore((s) => s.profile);
+  const { contacts } = useEmergencyContacts(profile?.userId);
+  const [now, setNow] = useState(Date.now());
+  const [actionResult, setActionResult] = useState<string | null>(null);
 
-  const flashAnim = useRef(new Animated.Value(0.15)).current;
+  const open = !!incident && isOpen(incident.state);
+  const urgent = open && incident.state !== 'acknowledged';
 
-  // 1. Setup siren audio and flashing visual animation on mount
   useEffect(() => {
-    notificationService.startEmergencySiren();
-    
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(flashAnim, {
-          toValue: 0.45,
-          duration: 650,
-          useNativeDriver: true,
-        }),
-        Animated.timing(flashAnim, {
-          toValue: 0.15,
-          duration: 650,
-          useNativeDriver: true,
-        })
-      ])
-    );
-    animation.start();
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, []);
 
-    return () => {
-      notificationService.stopEmergencySiren();
-      animation.stop();
-    };
-  }, [flashAnim]);
-
-  // 2. React to alert removal
   useEffect(() => {
-    if (!activeAlert) {
-      router.replace('/(app)/(tabs)');
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => open);
+    return () => sub.remove();
+  }, [open]);
+
+  useEffect(() => {
+    if (urgent) notificationService.startAlertVibration();
+    else notificationService.stopAlertVibration();
+    return () => notificationService.stopAlertVibration();
+  }, [urgent]);
+
+  useEffect(() => {
+    if (!open) {
+      if (router.canGoBack()) router.back();
+      else router.replace('/(app)/(tabs)');
     }
-  }, [activeAlert]);
+  }, [open, router]);
 
-  const handleCancelFalseAlarm = () => {
+  if (!incident || !open || !profile) return <View style={styles.root} />;
+
+  const uid = profile.userId;
+  const st = INCIDENT_STATE[incident.state];
+  const secondsLeft =
+    incident.state === 'countdown' && incident.countdownEndsAt ? Math.max(0, Math.ceil((incident.countdownEndsAt - now) / 1000)) : null;
+  const primary = contacts[0];
+  const dispatch = dispatchSummary(incident);
+
+  const resolve = (resolution: 'false_alarm' | 'assisted') =>
     Alert.alert(
-      'Cancel Alarm',
-      'Confirm this was a false alarm? The siren will silence and no dispatch will be sent.',
+      resolution === 'false_alarm' ? 'Close this alert?' : 'Mark help as arrived?',
+      resolution === 'false_alarm'
+        ? 'Your caregivers will see that you are OK and the alert is closed.'
+        : 'The alert will be closed as resolved.',
       [
-        { text: 'Keep Alert Active', style: 'default' },
-        { 
-          text: 'Dismiss False Alarm', 
-          style: 'destructive',
-          onPress: () => {
-            notificationService.stopEmergencySiren();
-            cancelAlert();
-          } 
-        }
-      ]
+        { text: 'Go back', style: 'cancel' },
+        { text: 'Yes, close alert', onPress: () => emergencyService.resolve(uid, resolution) },
+      ],
     );
-  };
 
-  const handleEscalateDispatch = () => {
-    // Immediately escalate alerts to contacts
-    if (user) {
-      acknowledgeAlert(user.userId);
-      Alert.alert('Dispatched!', 'Caregivers and responders have been successfully alerted.');
-    }
-  };
-
-  if (!activeAlert) return null;
+  const isEarly = incident.state === 'possible_fall' || incident.state === 'countdown';
 
   return (
-    <View style={styles.container}>
-      
-      {/* Red flashing overlay bg */}
-      <Animated.View 
-        style={[styles.flashingBg, { opacity: flashAnim }]}
-      />
+    <View style={[styles.root, { backgroundColor: isEarly ? '#3B0A0A' : colors.bg }]}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl }]}>
+        {incident.simulated ? (
+          <View style={{ marginBottom: spacing.md }}>
+            <SimulatedBadge />
+            <Text style={[type.caption, { marginTop: 6 }]}>Simulator test. Nobody will be notified.</Text>
+          </View>
+        ) : null}
 
-      {/* Top Banner Alert Info */}
-      <View style={styles.topBanner}>
-        <View style={styles.iconContainer}>
-          <ShieldAlert size={44} color="#EF4444" />
+        <View style={styles.header} accessibilityLiveRegion="assertive">
+          <ShieldAlert size={56} color={isEarly ? '#FCA5A5' : colors.danger} />
+          <Text style={styles.title} accessibilityRole="header">
+            {incident.state === 'possible_fall'
+              ? 'Possible fall detected'
+              : incident.state === 'countdown'
+                ? 'Are you OK?'
+                : incident.state === 'acknowledged'
+                  ? `${incident.acknowledgedBy?.name ?? 'A caregiver'} is responding`
+                  : incident.source === 'wearable'
+                    ? 'Getting you help'
+                    : 'SOS sent'}
+          </Text>
+          <Text style={styles.subtitle}>{sourceLabel(incident)} · {new Date(incident.createdAt).toLocaleTimeString()}</Text>
+          <StatusBadge label={st.label} tone={st.tone} style={{ alignSelf: 'center', marginTop: spacing.md }} />
         </View>
-        <Text style={styles.bannerTitle}>
-          {activeAlert.status === 'escalated' ? 'DISPATCH ACTIVE' : 'FALL DETECTED'}
-        </Text>
-        <Text style={styles.bannerSubtitle}>
-          {activeAlert.status === 'escalated' ? 'Responders notified' : 'Checking client vitals'}
-        </Text>
-      </View>
 
-      {/* Center Countdown or Status details */}
-      <View style={styles.centerSection}>
-        {activeAlert.status === 'pending' ? (
-          <View style={styles.centerContent}>
-            <Text style={styles.countdownText}>{countdown}</Text>
-            <Text style={styles.countdownSubText}>
-              seconds to auto-escalation
-            </Text>
+        {secondsLeft != null ? (
+          <View style={styles.countdown} accessible accessibilityLabel={`Caregivers will be alerted in ${secondsLeft} seconds`}>
+            <Text style={styles.countdownNumber}>{secondsLeft}</Text>
+            <Text style={styles.countdownLabel}>seconds until your caregivers are alerted</Text>
+          </View>
+        ) : null}
+        {incident.state === 'possible_fall' ? (
+          <Text style={[styles.explain, { marginBottom: spacing.xl }]}>Your watch noticed a hard impact and is checking whether you are moving.</Text>
+        ) : null}
+
+        {isEarly ? (
+          <View style={{ gap: spacing.md }}>
+            <Button
+              title="I'm OK, cancel"
+              size="xl"
+              icon={<CheckCircle2 size={28} color={colors.primaryText} />}
+              onPress={() => emergencyService.cancel(uid)}
+              accessibilityHint="Cancels the alert. Nobody will be notified."
+              testID="cancel-alert"
+            />
+            <Button title="I need help now" size="xl" variant="danger" onPress={() => emergencyService.escalateNow(uid)} accessibilityHint="Alerts your caregivers immediately" />
           </View>
         ) : (
-          <View style={styles.statusBox}>
-            <BellRing size={32} color="#F87171" style={styles.statusIcon} />
-            <Text style={styles.statusTitle}>Emergency Broadcast Broadcasted</Text>
-            <Text style={styles.statusSubText}>
-              Caregivers and primary responders were notified with GPS telemetry data.
-            </Text>
-          </View>
+          <>
+            <View style={[styles.dispatch, { borderColor: dispatch.tone === 'danger' ? colors.danger : dispatch.tone === 'warning' ? colors.warning : colors.border }]}>
+              <Text style={type.bodyStrong}>Caregiver notification</Text>
+              <Text style={[type.body, { marginTop: 4 }]}>{dispatch.text}</Text>
+            </View>
+
+            <Text style={[type.heading, { marginTop: spacing.xl, marginBottom: spacing.md }]}>Get in touch</Text>
+            {primary ? (
+              <Button
+                title={`Call ${primary.name}`}
+                size="lg"
+                icon={<Phone size={24} color={colors.primaryText} />}
+                onPress={async () => setActionResult((await callNumber(primary.phone)).message)}
+                accessibilityHint={formatPhone(primary.phone)}
+                style={{ marginBottom: spacing.md }}
+              />
+            ) : null}
+            {contacts.length > 0 ? (
+              <Button
+                title={contacts.length === 1 ? `Text ${contacts[0].name}` : `Text all ${contacts.length} contacts`}
+                size="lg"
+                variant="secondary"
+                icon={<MessageSquare size={24} color={colors.text} />}
+                onPress={async () => setActionResult((await textContacts(contacts.map((c) => c.phone), incidentMessage(incident))).message)}
+                style={{ marginBottom: spacing.md }}
+              />
+            ) : (
+              <Text style={[type.body, { marginBottom: spacing.md }]}>No emergency contacts saved. Add them in Settings.</Text>
+            )}
+            {env.emergencyServicesNumber ? (
+              <Button
+                title={`Call emergency services (${env.emergencyServicesNumber})`}
+                size="lg"
+                variant="danger"
+                icon={<Phone size={24} color="#FFFFFF" />}
+                onPress={async () => setActionResult((await callNumber(env.emergencyServicesNumber)).message)}
+                style={{ marginBottom: spacing.md }}
+              />
+            ) : null}
+            {actionResult ? (
+              <Text style={[type.caption, { marginBottom: spacing.md }]} accessibilityLiveRegion="polite">
+                {actionResult}
+              </Text>
+            ) : null}
+          </>
         )}
-      </View>
 
-      <View style={{ flex: 1 }} />
-
-      {/* Patient Location and details card */}
-      <View style={styles.patientCard}>
-        <Text style={styles.patientLabel}>
-          Patient Status
-        </Text>
-        
-        <Text style={styles.patientName}>
-          {activeAlert.userName}
-        </Text>
-
-        <View style={styles.locationRow}>
-          <MapPin size={16} color="#EF4444" style={styles.locationIcon} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.addressText}>
-              {activeAlert.location.address || 'Address lookup pending...'}
-            </Text>
-            <Text style={styles.coordsText}>
-              Lat: {activeAlert.location.latitude.toFixed(5)} | Lng: {activeAlert.location.longitude.toFixed(5)}
-            </Text>
-          </View>
+        <View style={{ marginTop: spacing.xl }}>
+          <LiveMap location={incident.location} title="Location sent with this alert" />
         </View>
-      </View>
 
-      {/* Controls Action panel */}
-      <View style={styles.actionPanel}>
-        {activeAlert.status === 'pending' ? (
-          <View style={styles.actionGroup}>
-            <Button
-              title="Cancel (False Alarm)"
-              onPress={handleCancelFalseAlarm}
-              variant="outline"
-              size="lg"
-              style={styles.cancelBtn}
-            />
-            
-            <Button
-              title="Dispatch Responders Now"
-              onPress={handleEscalateDispatch}
-              variant="danger"
-              size="lg"
-              style={styles.dispatchBtn}
-            />
+        {!isEarly ? (
+          <View style={{ gap: spacing.md }}>
+            <Button title="Help has arrived" variant="outline" size="lg" onPress={() => resolve('assisted')} />
+            <Button title="I'm OK now, close alert" variant="outline" size="lg" onPress={() => resolve('false_alarm')} />
           </View>
-        ) : (
-          <Button
-            title="Acknowledge & Close Screen"
-            onPress={() => {
-              notificationService.stopEmergencySiren();
-              if (user) acknowledgeAlert(user.userId);
-              router.replace('/(app)/(tabs)');
-            }}
-            variant="primary"
-            size="lg"
-            style={styles.ackBtn}
-          />
-        )}
-      </View>
-
+        ) : null}
+        <Text style={styles.disclaimer}>SafeFall AI does not contact emergency services automatically.</Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#020617', // slate-950
-    paddingHorizontal: 24,
-    paddingVertical: 56,
-  },
-  flashingBg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#DC2626', // red-600
-  },
-  topBanner: {
-    alignItems: 'center',
-    marginTop: 40,
-    zIndex: 10,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(239,68,68,0.2)', // red-500/20
-    borderWidth: 2,
-    borderColor: '#EF4444', // red-500
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  bannerTitle: {
-    fontSize: 30,
-    fontWeight: '900', // black
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    textAlign: 'center',
-  },
-  bannerSubtitle: {
-    fontSize: 14,
-    fontWeight: '700', // bold
-    color: '#FECACA', // red-200
-    marginTop: 8,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  centerSection: {
-    alignItems: 'center',
-    marginVertical: 24,
-    zIndex: 10,
-  },
-  centerContent: {
-    alignItems: 'center',
-  },
-  countdownText: {
-    fontSize: 72,
-    fontWeight: '900', // black
-    color: '#FFFFFF',
-  },
-  countdownSubText: {
-    fontSize: 12,
-    fontWeight: '700', // bold
-    color: '#CBD5E1', // slate-300
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginTop: 8,
-  },
-  statusBox: {
-    backgroundColor: 'rgba(239,68,68,0.2)', // red-500/20
-    borderColor: 'rgba(239,68,68,0.3)', // red-500/30
-    borderWidth: 1,
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  statusIcon: {
-    marginBottom: 8,
-  },
-  statusTitle: {
-    fontSize: 14,
-    fontWeight: '700', // bold
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  statusSubText: {
-    fontSize: 12,
-    color: '#FECACA', // red-200
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  patientCard: {
-    backgroundColor: 'rgba(15,23,42,0.9)', // slate-900/90
-    borderColor: 'rgba(30,41,59,0.8)', // slate-800/80
-    borderWidth: 1,
-    padding: 20,
-    borderRadius: 24,
-    marginBottom: 16,
-    zIndex: 10,
-  },
-  patientLabel: {
-    fontSize: 12,
-    fontWeight: '700', // bold
-    color: '#94A3B8', // slate-400
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 12,
-  },
-  patientName: {
-    fontSize: 18,
-    fontWeight: '900', // black
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  locationIcon: {
-    marginRight: 8,
-    marginTop: 2,
-  },
-  addressText: {
-    fontSize: 12,
-    color: '#CBD5E1', // slate-300
-    lineHeight: 16,
-  },
-  coordsText: {
-    fontSize: 10,
-    color: '#64748B', // slate-500
-    fontWeight: '700', // bold
-    marginTop: 4,
-    textTransform: 'uppercase',
-  },
-  actionPanel: {
-    marginBottom: 16,
-    zIndex: 10,
-  },
-  actionGroup: {
-    gap: 12,
-  },
-  cancelBtn: {
-    width: '100%',
-    borderColor: '#334155', // slate-700
-    backgroundColor: '#0F172A', // slate-900
-    minHeight: 58,
-  },
-  dispatchBtn: {
-    width: '100%',
-    minHeight: 58,
-  },
-  ackBtn: {
-    width: '100%',
-    minHeight: 58,
-  },
+  root: { flex: 1, backgroundColor: colors.bg },
+  content: { paddingHorizontal: spacing.xl },
+  header: { alignItems: 'center', marginBottom: spacing.xl },
+  title: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textAlign: 'center', marginTop: spacing.md },
+  subtitle: { fontSize: 16, color: '#FECACA', marginTop: spacing.sm, textAlign: 'center' },
+  countdown: { alignItems: 'center', marginBottom: spacing.xxl },
+  countdownNumber: { fontSize: 96, fontWeight: '900', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  countdownLabel: { fontSize: 18, fontWeight: '700', color: '#FECACA', textAlign: 'center' },
+  explain: { ...type.body, color: '#FECACA', textAlign: 'center' },
+  dispatch: { padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1.5, backgroundColor: colors.surface },
+  disclaimer: { ...type.caption, textAlign: 'center', marginTop: spacing.xl },
 });

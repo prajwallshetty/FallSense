@@ -1,272 +1,316 @@
-// Firebase Authentication & Firestore Service Wrapper
-// Includes a local mock storage layer to allow testing without credentials.
-import { UserProfile, EmergencyContact, FallAlert, HealthLog, CaregiverRelation } from '../types';
+// Firebase Authentication & Firestore data access.
+// Authorisation is enforced by firestore.rules; the checks here only improve error messages.
+//
+// Collections (see docs/FIREBASE_SETUP.md):
+//   users/{uid}                      profile
+//   users/{uid}/contacts/{id}        emergency contacts
+//   users/{uid}/devices/{deviceId}   watch status mirrored for caregivers
+//   users/{uid}/private/push         FCM device tokens (owner only)
+//   linkCodes/{code}                 short-lived caregiver invite codes
+//   relations/{caregiverUid_elderlyUid}  caregiver <-> elderly links
+//   alerts/{incidentId}              fall / SOS incidents
 
-// Mock DB Initial State
-const MOCK_PROFILES: Record<string, UserProfile> = {
-  'elderly_1': {
-    userId: 'elderly_1',
-    email: 'elderly@safefall.ai',
-    role: 'elderly',
-    fullName: 'Margaret Thompson',
-    phone: '+1 (555) 123-4567',
-    avatarUrl: 'https://images.unsplash.com/photo-1544129491-3b3b62935042?auto=format&fit=crop&q=80&w=200',
-    bloodType: 'O-positive',
-    medicalConditions: 'Osteoporosis, Mild Hypertension',
-    birthDate: '1945-08-14',
-    createdAt: new Date().toISOString()
-  },
-  'caregiver_1': {
-    userId: 'caregiver_1',
-    email: 'caregiver@safefall.ai',
-    role: 'caregiver',
-    fullName: 'Sarah Thompson',
-    phone: '+1 (555) 987-6543',
-    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200',
-    createdAt: new Date().toISOString()
-  }
-};
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut as fbSignOut,
+  User,
+} from 'firebase/auth';
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
+import * as Crypto from 'expo-crypto';
+import { getFirebase } from './firebaseApp';
+import { CaregiverRelation, CloudDeviceStatus, EmergencyContact, LinkCode, UserProfile, UserRole } from '../types';
+import { Incident, Resolution } from '../emergency/incidentMachine';
+import { alertDocToIncident, incidentToAlertDoc, remoteFieldsFromDoc } from '../emergency/alertDoc';
+import { linkCodeFromBytes, LINK_CODE_LENGTH } from '../utils/validation';
+import type { RemoteIncidentFields } from '../emergency/incidentMachine';
 
-const MOCK_CONTACTS: Record<string, EmergencyContact[]> = {
-  'elderly_1': [
-    {
-      contactId: 'contact_1',
-      userId: 'elderly_1',
-      name: 'Sarah Thompson (Daughter)',
-      phone: '+1 (555) 987-6543',
-      relationship: 'Daughter / Primary Caregiver',
-      priorityOrder: 1
-    },
-    {
-      contactId: 'contact_2',
-      userId: 'elderly_1',
-      name: 'Dr. Robert Chen',
-      phone: '+1 (555) 234-5678',
-      relationship: 'Primary Physician',
-      priorityOrder: 2
-    }
-  ]
-};
+export const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
-const MOCK_HEALTH: Record<string, HealthLog[]> = {
-  'elderly_1': [
-    { logId: '2026-05-25', userId: 'elderly_1', date: '2026-05-25', stepsCount: 4200, activeMinutes: 32, movementScore: 68 },
-    { logId: '2026-05-26', userId: 'elderly_1', date: '2026-05-26', stepsCount: 5100, activeMinutes: 40, movementScore: 75 },
-    { logId: '2026-05-27', userId: 'elderly_1', date: '2026-05-27', stepsCount: 3800, activeMinutes: 28, movementScore: 60 },
-    { logId: '2026-05-28', userId: 'elderly_1', date: '2026-05-28', stepsCount: 6300, activeMinutes: 52, movementScore: 88 },
-    { logId: '2026-05-29', userId: 'elderly_1', date: '2026-05-29', stepsCount: 4700, activeMinutes: 38, movementScore: 70 },
-    { logId: '2026-05-30', userId: 'elderly_1', date: '2026-05-30', stepsCount: 3100, activeMinutes: 24, movementScore: 52 },
-    { logId: '2026-05-31', userId: 'elderly_1', date: '2026-05-31', stepsCount: 2200, activeMinutes: 18, movementScore: 40 }
-  ]
-};
+type Unsubscribe = () => void;
 
-const MOCK_ALERTS: FallAlert[] = [
-  {
-    alertId: 'hist_alert_1',
-    userId: 'elderly_1',
-    userName: 'Margaret Thompson',
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    location: { latitude: 37.7749, longitude: -122.4194, address: '123 Pine St, San Francisco, CA' },
-    status: 'acknowledged',
-    resolvedBy: 'caregiver_1',
-    resolvedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 45000).toISOString()
-  },
-  {
-    alertId: 'hist_alert_2',
-    userId: 'elderly_1',
-    userName: 'Margaret Thompson',
-    timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    location: { latitude: 37.7752, longitude: -122.4201, address: 'Market St & Van Ness Ave, San Francisco, CA' },
-    status: 'false_alarm',
-    resolvedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000 + 12000).toISOString()
-  }
-];
+const db = () => getFirebase().db;
+const auth = () => getFirebase().auth;
 
-const MOCK_RELATIONS: CaregiverRelation[] = [
-  {
-    relationId: 'rel_1',
-    caregiverId: 'caregiver_1',
-    elderlyId: 'elderly_1',
-    elderlyName: 'Margaret Thompson',
-    linkedAt: new Date().toISOString(),
-    isActive: true
-  }
-];
+function profileFromDoc(uid: string, d: Record<string, unknown>): UserProfile | null {
+  if (d.role !== 'elderly' && d.role !== 'caregiver') return null;
+  return {
+    userId: uid,
+    email: String(d.email ?? ''),
+    role: d.role,
+    fullName: String(d.fullName ?? ''),
+    phone: String(d.phone ?? ''),
+    medicalNotes: typeof d.medicalNotes === 'string' ? d.medicalNotes : undefined,
+    bloodType: typeof d.bloodType === 'string' ? d.bloodType : undefined,
+    birthYear: typeof d.birthYear === 'number' ? d.birthYear : null,
+    onboardingComplete: d.onboardingComplete === true,
+    createdAt: typeof d.createdAt === 'number' ? d.createdAt : 0,
+  };
+}
 
 class FirebaseService {
-  private isConfigured: boolean = false;
+  // ---------------- Auth ----------------
 
-  constructor() {
-    // If real credentials existed, we would initialize standard firebase sdk:
-    // const app = initializeApp(firebaseConfig);
-    // this.auth = getAuth(app);
-    // this.db = getFirestore(app);
-    this.isConfigured = false;
+  onAuthChanged(cb: (user: User | null) => void): Unsubscribe {
+    return onAuthStateChanged(auth(), cb);
   }
 
-  // --- Auth API ---
-
-  async login(email: string, password: string): Promise<UserProfile> {
-    await this.delay(1000); // Simulate API latency
-    
-    // Auto match credentials for demo purposes
-    if (email.includes('caregiver')) {
-      return MOCK_PROFILES['caregiver_1'];
-    }
-    
-    // Default to elderly user
-    return MOCK_PROFILES['elderly_1'];
+  currentUid(): string | null {
+    return auth().currentUser?.uid ?? null;
   }
 
-  async signup(email: string, role: 'elderly' | 'caregiver', fullName: string, phone: string, password?: string): Promise<UserProfile> {
-    await this.delay(1200);
-    const userId = `user_${Date.now()}`;
-    const newProfile: UserProfile = {
-      userId,
-      email,
-      role,
-      fullName,
-      phone,
-      createdAt: new Date().toISOString()
-    };
-    MOCK_PROFILES[userId] = newProfile;
-    
-    if (role === 'elderly') {
-      MOCK_CONTACTS[userId] = [];
-      MOCK_HEALTH[userId] = [];
-    }
-    return newProfile;
+  async signIn(email: string, password: string): Promise<void> {
+    await signInWithEmailAndPassword(auth(), email, password);
   }
 
-  async sendPasswordResetEmail(email: string): Promise<void> {
-    await this.delay(800);
+  async signUp(email: string, password: string): Promise<string> {
+    const cred = await createUserWithEmailAndPassword(auth(), email, password);
+    return cred.user.uid;
   }
 
-  // --- Profile Operations ---
-
-  async getProfile(userId: string): Promise<UserProfile | null> {
-    await this.delay(500);
-    return MOCK_PROFILES[userId] || null;
+  async signOut(): Promise<void> {
+    await fbSignOut(auth());
   }
 
-  async updateProfile(userId: string, data: Partial<UserProfile>): Promise<UserProfile> {
-    await this.delay(500);
-    if (!MOCK_PROFILES[userId]) throw new Error('User not found');
-    MOCK_PROFILES[userId] = { ...MOCK_PROFILES[userId], ...data };
-    return MOCK_PROFILES[userId];
+  async sendPasswordReset(email: string): Promise<void> {
+    await sendPasswordResetEmail(auth(), email);
   }
 
-  // --- Caregiver Relations ---
+  // ---------------- Profiles ----------------
 
-  async getCaregiverRelations(caregiverId: string): Promise<CaregiverRelation[]> {
-    await this.delay(500);
-    return MOCK_RELATIONS.filter(r => r.caregiverId === caregiverId);
+  async createProfile(p: { uid: string; email: string; role: UserRole; fullName: string; phone: string }): Promise<void> {
+    await setDoc(doc(db(), 'users', p.uid), {
+      email: p.email,
+      role: p.role,
+      fullName: p.fullName,
+      phone: p.phone,
+      onboardingComplete: false,
+      createdAt: Date.now(),
+    });
   }
 
-  async linkCaregiver(caregiverId: string, elderlyEmail: string): Promise<CaregiverRelation> {
-    await this.delay(1000);
-    const elderly = Object.values(MOCK_PROFILES).find(p => p.email === elderlyEmail && p.role === 'elderly');
-    if (!elderly) throw new Error('No elderly account found with that email.');
+  subscribeProfile(uid: string, cb: (p: UserProfile | null) => void, onError: (e: Error) => void): Unsubscribe {
+    return onSnapshot(
+      doc(db(), 'users', uid),
+      (snap) => cb(snap.exists() ? profileFromDoc(uid, snap.data()) : null),
+      onError,
+    );
+  }
 
-    const relationId = `rel_${Date.now()}`;
-    const newRelation: CaregiverRelation = {
-      relationId,
-      caregiverId,
+  async getProfile(uid: string): Promise<UserProfile | null> {
+    const snap = await getDoc(doc(db(), 'users', uid));
+    return snap.exists() ? profileFromDoc(uid, snap.data()) : null;
+  }
+
+  async updateProfile(
+    uid: string,
+    patch: Partial<Pick<UserProfile, 'fullName' | 'phone' | 'medicalNotes' | 'bloodType' | 'birthYear' | 'onboardingComplete'>>,
+  ): Promise<void> {
+    await updateDoc(doc(db(), 'users', uid), patch);
+  }
+
+  // ---------------- Emergency contacts ----------------
+
+  subscribeContacts(elderlyId: string, cb: (c: EmergencyContact[]) => void, onError: (e: Error) => void): Unsubscribe {
+    return onSnapshot(
+      query(collection(db(), 'users', elderlyId, 'contacts'), orderBy('priority', 'asc')),
+      (snap) =>
+        cb(
+          snap.docs.map((d) => {
+            const v = d.data();
+            return {
+              contactId: d.id,
+              name: String(v.name ?? ''),
+              phone: String(v.phone ?? ''),
+              relationship: String(v.relationship ?? ''),
+              priority: Number(v.priority ?? 99),
+            };
+          }),
+        ),
+      onError,
+    );
+  }
+
+  async addContact(elderlyId: string, c: Omit<EmergencyContact, 'contactId'>): Promise<string> {
+    const ref = doc(collection(db(), 'users', elderlyId, 'contacts'));
+    await setDoc(ref, { ...c, updatedAt: Date.now() });
+    return ref.id;
+  }
+
+  async updateContact(elderlyId: string, contactId: string, c: Omit<EmergencyContact, 'contactId'>): Promise<void> {
+    await setDoc(doc(db(), 'users', elderlyId, 'contacts', contactId), { ...c, updatedAt: Date.now() });
+  }
+
+  async deleteContact(elderlyId: string, contactId: string): Promise<void> {
+    await deleteDoc(doc(db(), 'users', elderlyId, 'contacts', contactId));
+  }
+
+  /** Rewrites priorities 1..n in the given order in a single atomic batch. */
+  async reorderContacts(elderlyId: string, orderedIds: string[]): Promise<void> {
+    const batch = writeBatch(db());
+    orderedIds.forEach((id, i) => batch.update(doc(db(), 'users', elderlyId, 'contacts', id), { priority: i + 1, updatedAt: Date.now() }));
+    await batch.commit();
+  }
+
+  // ---------------- Caregiver linking ----------------
+
+  /** Elderly user creates a single-use invite code valid for 15 minutes. */
+  async createLinkCode(elderly: UserProfile): Promise<LinkCode> {
+    const code = linkCodeFromBytes(await Crypto.getRandomBytesAsync(LINK_CODE_LENGTH));
+    const expiresAt = Date.now() + LINK_CODE_TTL_MS;
+    await setDoc(doc(db(), 'linkCodes', code), {
       elderlyId: elderly.userId,
       elderlyName: elderly.fullName,
-      linkedAt: new Date().toISOString(),
-      isActive: true
-    };
-    MOCK_RELATIONS.push(newRelation);
-    return newRelation;
+      createdAt: serverTimestamp(),
+      expiresAt: Timestamp.fromMillis(expiresAt),
+    });
+    return { code, elderlyId: elderly.userId, elderlyName: elderly.fullName, expiresAt };
   }
 
-  // --- Emergency Contacts ---
-
-  async getEmergencyContacts(userId: string): Promise<EmergencyContact[]> {
-    await this.delay(400);
-    return MOCK_CONTACTS[userId] || [];
+  async revokeLinkCode(code: string): Promise<void> {
+    await deleteDoc(doc(db(), 'linkCodes', code));
   }
 
-  async saveEmergencyContact(userId: string, contact: Omit<EmergencyContact, 'contactId'>): Promise<EmergencyContact> {
-    await this.delay(600);
-    const contactId = `contact_${Date.now()}`;
-    const newContact: EmergencyContact = { ...contact, contactId, userId };
-    
-    if (!MOCK_CONTACTS[userId]) {
-      MOCK_CONTACTS[userId] = [];
-    }
-    MOCK_CONTACTS[userId].push(newContact);
-    return newContact;
+  /** Caregiver redeems an invite code. Rules verify the code, expiry and the caregiver role. */
+  async redeemLinkCode(caregiver: UserProfile, code: string): Promise<CaregiverRelation> {
+    const codeRef = doc(db(), 'linkCodes', code);
+    const snap = await getDoc(codeRef);
+    if (!snap.exists()) throw new Error('That code was not found. Ask for a new code.');
+    const data = snap.data();
+    const expiresAt = (data.expiresAt as Timestamp).toMillis();
+    if (expiresAt < Date.now()) throw new Error('That code has expired. Ask for a new code.');
+    const elderlyId = String(data.elderlyId);
+    if (elderlyId === caregiver.userId) throw new Error('You cannot link to your own account.');
+    const relationId = `${caregiver.userId}_${elderlyId}`;
+    const createdAt = Date.now();
+    const batch = writeBatch(db());
+    batch.set(doc(db(), 'relations', relationId), {
+      caregiverId: caregiver.userId,
+      elderlyId,
+      caregiverName: caregiver.fullName,
+      elderlyName: String(data.elderlyName ?? ''),
+      linkCode: code,
+      createdAt,
+    });
+    batch.delete(codeRef); // single use
+    await batch.commit();
+    return { relationId, caregiverId: caregiver.userId, elderlyId, caregiverName: caregiver.fullName, elderlyName: String(data.elderlyName ?? ''), createdAt };
   }
 
-  async deleteEmergencyContact(userId: string, contactId: string): Promise<void> {
-    await this.delay(400);
-    if (MOCK_CONTACTS[userId]) {
-      MOCK_CONTACTS[userId] = MOCK_CONTACTS[userId].filter(c => c.contactId !== contactId);
-    }
+  subscribeRelations(user: UserProfile, cb: (r: CaregiverRelation[]) => void, onError: (e: Error) => void): Unsubscribe {
+    const field = user.role === 'caregiver' ? 'caregiverId' : 'elderlyId';
+    return onSnapshot(
+      query(collection(db(), 'relations'), where(field, '==', user.userId)),
+      (snap) =>
+        cb(
+          snap.docs.map((d) => {
+            const v = d.data();
+            return {
+              relationId: d.id,
+              caregiverId: String(v.caregiverId),
+              elderlyId: String(v.elderlyId),
+              caregiverName: String(v.caregiverName ?? ''),
+              elderlyName: String(v.elderlyName ?? ''),
+              createdAt: Number(v.createdAt ?? 0),
+            };
+          }),
+        ),
+      onError,
+    );
   }
 
-  // --- Health Telemetry Logs ---
-
-  async getHealthLogs(userId: string): Promise<HealthLog[]> {
-    await this.delay(600);
-    return MOCK_HEALTH[userId] || [];
+  async removeRelation(relationId: string): Promise<void> {
+    await deleteDoc(doc(db(), 'relations', relationId));
   }
 
-  async logHealthActivity(userId: string, steps: number, minutes: number): Promise<HealthLog> {
-    const today = new Date().toISOString().split('T')[0];
-    const score = Math.min(100, Math.round((steps / 8000) * 100)); // out of 8000 daily steps
-    
-    if (!MOCK_HEALTH[userId]) MOCK_HEALTH[userId] = [];
-    
-    const index = MOCK_HEALTH[userId].findIndex(l => l.date === today);
-    const updatedLog: HealthLog = {
-      logId: today,
-      userId,
-      date: today,
-      stepsCount: steps,
-      activeMinutes: minutes,
-      movementScore: score
-    };
+  // ---------------- Device status (for caregivers) ----------------
 
-    if (index > -1) {
-      MOCK_HEALTH[userId][index] = updatedLog;
-    } else {
-      MOCK_HEALTH[userId].push(updatedLog);
-    }
-    return updatedLog;
+  async upsertDeviceStatus(elderlyId: string, s: CloudDeviceStatus): Promise<void> {
+    await setDoc(doc(db(), 'users', elderlyId, 'devices', s.deviceId.replace(/[^A-Za-z0-9_-]/g, '-')), s);
   }
 
-  // --- Fall Alerts ---
-
-  async getAlertHistory(userId: string): Promise<FallAlert[]> {
-    await this.delay(600);
-    return MOCK_ALERTS.filter(a => a.userId === userId);
+  subscribeDeviceStatus(elderlyId: string, cb: (s: CloudDeviceStatus[]) => void, onError: (e: Error) => void): Unsubscribe {
+    return onSnapshot(
+      collection(db(), 'users', elderlyId, 'devices'),
+      (snap) => cb(snap.docs.map((d) => d.data() as CloudDeviceStatus).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))),
+      onError,
+    );
   }
 
-  async createFallAlert(alert: Omit<FallAlert, 'alertId'>): Promise<FallAlert> {
-    const newAlert: FallAlert = {
-      ...alert,
-      alertId: `alert_${Date.now()}`
-    };
-    MOCK_ALERTS.unshift(newAlert);
-    return newAlert;
+  // ---------------- Alerts ----------------
+
+  /** Idempotent upsert keyed by the stable incident id; safe to retry. */
+  async upsertAlert(incident: Incident): Promise<void> {
+    await setDoc(doc(db(), 'alerts', incident.id), incidentToAlertDoc(incident), { merge: true });
   }
 
-  async updateAlertStatus(alertId: string, status: FallAlert['status'], resolvedBy?: string): Promise<void> {
-    await this.delay(400);
-    const alert = MOCK_ALERTS.find(a => a.alertId === alertId);
-    if (alert) {
-      alert.status = status;
-      alert.resolvedAt = new Date().toISOString();
-      if (resolvedBy) alert.resolvedBy = resolvedBy;
-    }
+  async getAlertRemoteFields(alertId: string): Promise<RemoteIncidentFields | null> {
+    const snap = await getDoc(doc(db(), 'alerts', alertId));
+    return snap.exists() ? remoteFieldsFromDoc(snap.data()) : null;
   }
 
-  // Helper utility
-  private delay(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  subscribeAlert(alertId: string, cb: (r: RemoteIncidentFields | null) => void, onError: (e: Error) => void): Unsubscribe {
+    return onSnapshot(doc(db(), 'alerts', alertId), (snap) => cb(snap.exists() ? remoteFieldsFromDoc(snap.data()) : null), onError);
+  }
+
+  subscribeAlertsFor(elderlyId: string, cb: (a: Incident[]) => void, onError: (e: Error) => void, max = 50): Unsubscribe {
+    return onSnapshot(
+      query(collection(db(), 'alerts'), where('elderlyId', '==', elderlyId), orderBy('createdAt', 'desc'), limit(max)),
+      (snap) => cb(snap.docs.map((d) => alertDocToIncident(d.id, d.data())).filter((x): x is Incident => x !== null)),
+      onError,
+    );
+  }
+
+  async acknowledgeAlert(alertId: string, by: { uid: string; name: string }): Promise<void> {
+    const now = Date.now();
+    await updateDoc(doc(db(), 'alerts', alertId), {
+      state: 'acknowledged',
+      acknowledgedBy: by,
+      acknowledgedAt: now,
+      updatedAt: now,
+      timeline: arrayUnion({ at: now, type: 'acknowledged', by: by.uid }),
+    });
+  }
+
+  async resolveAlert(alertId: string, by: string, resolution: Resolution): Promise<void> {
+    const now = Date.now();
+    await updateDoc(doc(db(), 'alerts', alertId), {
+      state: 'resolved',
+      resolvedBy: by,
+      resolvedAt: now,
+      resolution,
+      updatedAt: now,
+      timeline: arrayUnion({ at: now, type: 'resolved', by, detail: resolution }),
+    });
+  }
+
+  // ---------------- Push tokens ----------------
+
+  async savePushToken(uid: string, token: string): Promise<void> {
+    await setDoc(doc(db(), 'users', uid, 'private', 'push'), { tokens: arrayUnion(token), updatedAt: Date.now() }, { merge: true });
+  }
+
+  async removePushToken(uid: string, token: string): Promise<void> {
+    await setDoc(doc(db(), 'users', uid, 'private', 'push'), { tokens: arrayRemove(token), updatedAt: Date.now() }, { merge: true });
   }
 }
 

@@ -1,97 +1,105 @@
-import { create } from 'zustand';
-import { Device, DeviceTelemetry } from '../types';
-import * as SecureStore from 'expo-secure-store';
+// Watch connection state. Only the pairing (which watch to reconnect to) is persisted; live
+// connection state always starts as disconnected so the UI never shows a stale "connected".
 
-interface DeviceState {
-  pairedDevice: Device | null;
-  scannedDevices: Device[];
-  isScanning: boolean;
-  isConnected: boolean;
-  isSimulatorMode: boolean;
-  telemetry: DeviceTelemetry | null;
-  rssiHistory: number[];
-  
-  setPairedDevice: (device: Device | null) => void;
-  setScannedDevices: (devices: Device[]) => void;
-  setScanning: (scanning: boolean) => void;
-  setConnected: (connected: boolean) => void;
-  setSimulatorMode: (enabled: boolean) => void;
-  updateTelemetry: (telemetry: DeviceTelemetry | null) => void;
-  addRssiReading: (rssi: number) => void;
-  initializeDevice: () => Promise<void>;
-  pairDevice: (device: Device) => Promise<void>;
-  unpairDevice: () => Promise<void>;
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { LinkStatus } from '../ble/connectionManager';
+import type { DeviceState, TelemetryPacket } from '../ble/protocol';
+import type { ScannedPeripheral } from '../ble/transport';
+
+export interface PairedDevice {
+  deviceId: string;
+  name: string;
+  pairedAt: number;
+  /** True only for the developer simulator. */
+  isSimulated: boolean;
 }
 
-export const useDeviceStore = create<DeviceState>((set, get) => ({
-  pairedDevice: null,
-  scannedDevices: [],
-  isScanning: false,
-  isConnected: false,
-  isSimulatorMode: true, // Default to true for ease of previewing/testing
-  telemetry: {
-    accelX: 0.0,
-    accelY: 9.8, // Gravity standard on Y
-    accelZ: 0.1,
-    gyroX: 0.0,
-    gyroY: 0.0,
-    gyroZ: 0.0,
-    fallScore: 12,
-  },
-  rssiHistory: [-72, -74, -71, -75],
+export interface LiveTelemetry {
+  accel: TelemetryPacket['accel'];
+  gyro: TelemetryPacket['gyro'];
+  magnitudeG: number;
+  receivedAt: number;
+}
 
-  setPairedDevice: (device) => set({ pairedDevice: device }),
-  setScannedDevices: (scannedDevices) => set({ scannedDevices }),
-  setScanning: (isScanning) => set({ isScanning }),
-  setConnected: (isConnected) => set({ isConnected }),
-  setSimulatorMode: (isSimulatorMode) => set({ isSimulatorMode }),
-  updateTelemetry: (telemetry) => set({ telemetry }),
-  
-  addRssiReading: (rssi) => set((state) => {
-    const updatedHistory = [...state.rssiHistory.slice(-10), rssi];
-    return { 
-      rssiHistory: updatedHistory,
-      pairedDevice: state.pairedDevice 
-        ? { ...state.pairedDevice, rssi } 
-        : null 
-    };
-  }),
+interface DeviceStore {
+  paired: PairedDevice | null;
 
-  initializeDevice: async () => {
-    try {
-      const storedDevice = await SecureStore.getItemAsync('paired_device');
-      if (storedDevice) {
-        const deviceObj = JSON.parse(storedDevice) as Device;
-        set({ 
-          pairedDevice: deviceObj, 
-          isConnected: deviceObj.status === 'connected' 
-        });
-      }
-    } catch (err) {
-      console.error('Failed to load device config', err);
-    }
-  },
+  linkStatus: LinkStatus;
+  linkError: string | null;
+  nextRetryAt: number | null;
+  firmwareVersion: string | null;
+  hasTelemetry: boolean;
+  batteryPercent: number | null;
+  batteryMillivolts: number | null;
+  charging: boolean;
+  imuOk: boolean | null;
+  deviceState: DeviceState | null;
+  lastPacketAt: number | null;
+  isStale: boolean;
+  telemetry: LiveTelemetry | null;
+  protocolErrors: number;
+  lastProtocolError: string | null;
 
-  pairDevice: async (device) => {
-    try {
-      const paired: Device = {
-        ...device,
-        status: 'connected',
-        lastSync: new Date().toISOString()
-      };
-      await SecureStore.setItemAsync('paired_device', JSON.stringify(paired));
-      set({ pairedDevice: paired, isConnected: true });
-    } catch (err) {
-      console.error('Failed to save device pairing', err);
-    }
-  },
+  scanning: boolean;
+  scanResults: ScannedPeripheral[];
+  scanError: string | null;
 
-  unpairDevice: async () => {
-    try {
-      await SecureStore.deleteItemAsync('paired_device');
-      set({ pairedDevice: null, isConnected: false, telemetry: null });
-    } catch (err) {
-      console.error('Failed to delete device pairing', err);
-    }
-  }
-}));
+  setPaired: (p: PairedDevice | null) => void;
+  patch: (p: Partial<Omit<DeviceStore, 'setPaired' | 'patch' | 'resetLive' | 'addScanResult'>>) => void;
+  addScanResult: (p: ScannedPeripheral) => void;
+  resetLive: () => void;
+}
+
+const LIVE_DEFAULTS = {
+  linkStatus: 'idle' as LinkStatus,
+  linkError: null,
+  nextRetryAt: null,
+  firmwareVersion: null,
+  hasTelemetry: false,
+  batteryPercent: null,
+  batteryMillivolts: null,
+  charging: false,
+  imuOk: null,
+  deviceState: null,
+  lastPacketAt: null,
+  isStale: false,
+  telemetry: null,
+  protocolErrors: 0,
+  lastProtocolError: null,
+};
+
+export const useDeviceStore = create<DeviceStore>()(
+  persist(
+    (set) => ({
+      paired: null,
+      ...LIVE_DEFAULTS,
+      scanning: false,
+      scanResults: [],
+      scanError: null,
+
+      setPaired: (paired) => set({ paired }),
+      patch: (p) => set(p),
+      addScanResult: (p) =>
+        set((s) => {
+          const existing = s.scanResults.findIndex((r) => r.id === p.id);
+          const list = [...s.scanResults];
+          if (existing >= 0) list[existing] = p;
+          else list.push(p);
+          // SafeFall watches first, then strongest signal.
+          list.sort((a, b) => Number(b.looksLikeSafeFall) - Number(a.looksLikeSafeFall) || (b.rssi ?? -999) - (a.rssi ?? -999));
+          return { scanResults: list };
+        }),
+      resetLive: () => set({ ...LIVE_DEFAULTS }),
+    }),
+    {
+      name: 'safefall.device.v1',
+      version: 1,
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (s) => ({ paired: s.paired }),
+    },
+  ),
+);
+
+export const isLinkUp = (s: LinkStatus) => s === 'connected';

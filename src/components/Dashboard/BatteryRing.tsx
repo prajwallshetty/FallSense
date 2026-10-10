@@ -1,101 +1,52 @@
 import React from 'react';
-import { View, Text } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+import { colors } from '../../theme';
 
 interface BatteryRingProps {
-  percentage: number;
+  /** null = unknown (watch not connected or cannot measure). Never shown as a number. */
+  percentage: number | null;
   size?: number;
   strokeWidth?: number;
+  caption?: string;
 }
 
-export const BatteryRing: React.FC<BatteryRingProps> = ({
-  percentage,
-  size = 140,
-  strokeWidth = 12,
-}) => {
+export const BatteryRing: React.FC<BatteryRingProps> = ({ percentage, size = 120, strokeWidth = 12, caption = 'Watch battery' }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  // Determine colors based on charge level
-  const getBatteryColors = () => {
-    if (percentage > 50) return { start: '#0D9488', end: '#2DD4BF', text: '#2DD4BF' }; // Good - Teal
-    if (percentage > 20) return { start: '#D97706', end: '#FBBF24', text: '#FBBF24' }; // Moderate - Amber
-    return { start: '#EF4444', end: '#F87171', text: '#EF4444' }; // Critical - Red
-  };
-
-  const colors = getBatteryColors();
+  const pct = percentage == null ? 0 : Math.max(0, Math.min(100, percentage));
+  const color = percentage == null ? colors.textSubtle : pct > 50 ? colors.success : pct > 20 ? colors.warning : colors.danger;
+  const label = percentage == null ? 'Battery level unknown' : `Battery ${pct} percent${pct <= 20 ? ', low' : ''}`;
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View style={[styles.container, { width: size, height: size }]} accessible accessibilityLabel={label}>
       <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-        <Defs>
-          <LinearGradient id="batteryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.start} />
-            <Stop offset="100%" stopColor={colors.end} />
-          </LinearGradient>
-        </Defs>
-
-        {/* Gray Background Circle */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#E2E8F0"
-          strokeWidth={strokeWidth}
-          fill="transparent"
-          strokeOpacity={0.1}
-        />
-
-        {/* Foreground Progress Circle */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="url(#batteryGrad)"
-          strokeWidth={strokeWidth}
-          fill="transparent"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-        />
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.border} strokeWidth={strokeWidth} fill="transparent" />
+        {percentage != null ? (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference - (pct / 100) * circumference}
+            strokeLinecap="round"
+          />
+        ) : null}
       </Svg>
-
-      {/* Inner Label */}
-      <View style={styles.innerLabelContainer}>
-        <Text style={styles.percentageText}>
-          {percentage}%
-        </Text>
-        <Text style={[styles.batteryText, { color: colors.text }]}>
-          Battery
-        </Text>
+      <View style={styles.inner}>
+        <Text style={[styles.value, { color: percentage == null ? colors.textSubtle : colors.text }]}>{percentage == null ? '--' : `${pct}%`}</Text>
+        <Text style={styles.caption}>{percentage == null ? 'Unknown' : caption}</Text>
       </View>
     </View>
   );
 };
 
-import { StyleSheet } from 'react-native';
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  innerLabelContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  percentageText: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  batteryText: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: 2,
-  },
+  container: { alignItems: 'center', justifyContent: 'center' },
+  inner: { position: 'absolute', alignItems: 'center' },
+  value: { fontSize: 28, fontWeight: '800' },
+  caption: { fontSize: 13, fontWeight: '600', color: colors.textSubtle, marginTop: 2 },
 });

@@ -1,138 +1,126 @@
 import React, { useEffect } from 'react';
-import { Stack, useRouter, usePathname } from 'expo-router';
-import { useAuthStore } from '../store/authStore';
-import { useAlertStore } from '../store/alertStore';
-import { useDeviceStore } from '../store/deviceStore';
-import { notificationService } from '../services/notificationService';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Shield } from 'lucide-react-native';
+import { useAuthStore } from '../store/authStore';
+import { useIncidentStore } from '../store/incidentStore';
+import { useCaregiverStore } from '../store/caregiverStore';
+import { endLocalSession, startSession, signOutEverywhere } from '../services/session';
+import { isOpen } from '../emergency/incidentMachine';
+import { missingFirebaseKeys } from '../config/env';
+import { Button } from '../components/ui/Button';
+import { colors, spacing, type } from '../theme';
+
+function Splash({ label }: { label: string }) {
+  return (
+    <View style={styles.center}>
+      <View style={styles.logo}>
+        <Shield size={36} color={colors.primary} />
+      </View>
+      <Text style={type.title}>SafeFall AI</Text>
+      <Text style={[type.body, { marginTop: spacing.sm }]}>{label}</Text>
+      <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xxl }} />
+    </View>
+  );
+}
+
+function ConfigError() {
+  return (
+    <View style={[styles.center, { alignItems: 'stretch' }]}>
+      <Text style={type.title}>Setup required</Text>
+      <Text style={[type.body, { marginTop: spacing.md }]}>
+        This build has no Firebase configuration, so sign-in and caregiver alerts cannot work. Add these values to your
+        .env file (see .env.example and docs/FIREBASE_SETUP.md) and rebuild:
+      </Text>
+      {missingFirebaseKeys().map((k) => (
+        <Text key={k} style={[type.bodyStrong, { marginTop: spacing.sm }]}>
+          • EXPO_PUBLIC_FIREBASE_{k.replace(/[A-Z]/g, (c) => `_${c}`).toUpperCase()}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+function ProfileError({ message }: { message: string }) {
+  return (
+    <View style={[styles.center, { alignItems: 'stretch' }]}>
+      <Text style={type.title}>Cannot load your account</Text>
+      <Text style={[type.body, { marginVertical: spacing.lg }]}>{message}</Text>
+      <Button title="Sign out" variant="outline" onPress={() => signOutEverywhere().catch(() => undefined)} />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const router = useRouter();
-  const pathname = usePathname();
-  const colorScheme = useColorScheme();
+  const segments = useSegments();
+  const { status, profile, error, initialize, relations } = useAuthStore();
+  const active = useIncidentStore((s) => s.active);
+  const hydrated = useIncidentStore((s) => s.hydrated);
 
-  const { isAuthenticated, isLoading, initializeSession } = useAuthStore();
-  const { activeAlert } = useAlertStore();
-  const { initializeDevice } = useDeviceStore();
+  useEffect(() => initialize(), [initialize]);
 
-  // 1. Initialise core sessions on mount
+  // Start per-user services once the profile is known; stop them if the session ends.
   useEffect(() => {
-    initializeSession();
-    initializeDevice();
-  }, []);
+    if (status === 'ready' && profile) startSession(profile).catch(() => undefined);
+    if (status === 'signed_out') endLocalSession().catch(() => undefined);
+  }, [status, profile]);
 
-  // 2. Auth State Redirect Guard
+  // Caregivers: live alerts for every linked elderly user.
   useEffect(() => {
-    if (isLoading) return;
+    if (status === 'ready' && profile?.role === 'caregiver') {
+      useCaregiverStore.getState().watch(relations.map((r) => r.elderlyId));
+    }
+  }, [status, profile?.role, relations]);
 
-    const inAuthGroup = pathname.startsWith('/(auth)');
-
-    if (!isAuthenticated) {
-      if (!inAuthGroup) {
-        router.replace('/(auth)/login' as any);
-      }
-    } else {
-      if (inAuthGroup) {
-        router.replace('/(onboarding)/welcome' as any);
+  // Navigation guard.
+  useEffect(() => {
+    const parts = segments as string[];
+    const group = parts[0];
+    const route = parts[1];
+    if (status === 'signed_out' && group !== '(auth)') router.replace('/(auth)/login');
+    else if (status === 'signed_out' && route === 'complete-profile') router.replace('/(auth)/login');
+    else if (status === 'needs_profile' && route !== 'complete-profile') router.replace('/(auth)/complete-profile');
+    else if (status === 'ready' && profile) {
+      if (!profile.onboardingComplete && group !== '(onboarding)') router.replace('/(onboarding)/welcome');
+      else if (profile.onboardingComplete && (group === '(auth)' || group === '(onboarding)' || group === undefined)) {
+        router.replace('/(app)/(tabs)');
       }
     }
-  }, [isAuthenticated, isLoading, pathname]);
+  }, [status, profile, segments, router]);
 
-  // 3. Fall Alert Interceptor
+  // Elderly users: an open incident always brings up the full-screen alert.
+  const incidentOpen = !!active && isOpen(active.state) && profile?.role === 'elderly';
   useEffect(() => {
-    if (activeAlert && (activeAlert.status === 'pending' || activeAlert.status === 'escalated')) {
-      if (pathname !== '/alert') {
-        router.push('/alert' as any);
-        notificationService.startEmergencySiren();
-      }
-    } else {
-      notificationService.stopEmergencySiren();
-    }
-  }, [activeAlert, pathname]);
+    if (status === 'ready' && hydrated && incidentOpen && segments[0] !== 'alert') router.push('/alert');
+  }, [incidentOpen, status, hydrated, segments, router]);
 
-  if (isLoading) {
-    return (
-      <LinearGradient
-        colors={['#020617', '#0F172A', '#020617']}
-        style={styles.loadingContainer}
-      >
-        <View style={styles.logoBadge}>
-          <Shield size={32} color="#2DD4BF" />
-        </View>
-        <Text style={styles.loadingTitle}>SafeFall AI</Text>
-        <Text style={styles.loadingSubtitle}>Securing bio-telemetry stream...</Text>
-        <ActivityIndicator size="small" color="#0D9488" style={styles.spinner} />
-      </LinearGradient>
-    );
-  }
+  let overlay: React.ReactNode = null;
+  if (status === 'config_error') overlay = <ConfigError />;
+  else if (status === 'initializing' || status === 'loading_profile') overlay = <Splash label={status === 'initializing' ? 'Starting…' : 'Loading your account…'} />;
+  else if (status === 'error') overlay = <ProfileError message={error ?? 'Unknown error'} />;
 
+  // The navigator always stays mounted (expo-router requirement); blocking states overlay it.
   return (
     <SafeAreaProvider>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colorScheme === 'dark' ? '#0F172A' : '#F8FAFC' },
-        }}
-      >
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen 
-          name="alert" 
-          options={{ 
-            headerShown: false, 
-            presentation: 'fullScreenModal',
-            animation: 'fade'
-          }} 
-        />
-      </Stack>
+      <StatusBar style="light" />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade' }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(onboarding)" />
+          <Stack.Screen name="(app)" />
+          <Stack.Screen name="alert" options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'fade' }} />
+        </Stack>
+        {overlay ? <View style={StyleSheet.absoluteFill}>{overlay}</View> : null}
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: 'rgba(13, 148, 136, 0.1)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(45, 212, 191, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#2DD4BF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  loadingTitle: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 26,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  loadingSubtitle: {
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 6,
-    letterSpacing: 0.5,
-  },
-  spinner: {
-    marginTop: 32,
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, backgroundColor: colors.bg },
+  logo: { width: 76, height: 76, borderRadius: 24, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
 });

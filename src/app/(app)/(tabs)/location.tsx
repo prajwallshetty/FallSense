@@ -1,243 +1,86 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Share, Pressable, Alert, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Linking, Share, Text } from 'react-native';
+import { MapPin } from 'lucide-react-native';
 import { useAuthStore } from '../../../store/authStore';
-import { locationService } from '../../../services/locationService';
-import { LiveMap } from '../../../components/Map/LiveMap';
+import { useCaregiverStore } from '../../../store/caregiverStore';
+import { locationService, LocationPermission, mapsUrl } from '../../../services/locationService';
+import { LocationSnapshot } from '../../../emergency/incidentMachine';
+import { Screen } from '../../../components/ui/Screen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { Share2, Compass, AlertCircle, RefreshCw } from 'lucide-react-native';
+import { EmptyState, LoadingState } from '../../../components/ui/Feedback';
+import { LiveMap } from '../../../components/Map/LiveMap';
+import { ElderPicker } from '../../../components/Caregiver/ElderPicker';
+import { colors, spacing, type } from '../../../theme';
 
-export default function LocationScreen() {
-  const { user, activeElderlyProfile } = useAuthStore();
-  const targetUser = activeElderlyProfile || user;
+function OwnLocation() {
+  const profile = useAuthStore((s) => s.profile);
+  const [perm, setPerm] = useState<LocationPermission | null>(null);
+  const [loc, setLoc] = useState<LocationSnapshot | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const [location, setLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchLiveLocation = async () => {
-    setIsLoading(true);
-    try {
-      const current = await locationService.getCurrentLocation();
-      setLocation(current);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLiveLocation();
+  const refresh = useCallback(async () => {
+    setBusy(true);
+    const p = await locationService.getPermission();
+    setPerm(p);
+    if (p === 'granted') setLoc(await locationService.getCurrentFix());
+    setBusy(false);
   }, []);
 
-  const handleShareTracking = async () => {
-    if (!location) return;
-    try {
-      const trackingUrl = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
-      await Share.share({
-        message: `Live Location Update for ${targetUser?.fullName || 'Elderly Patient'}: ${location.address}. Coordinates: ${location.latitude}, ${location.longitude}. Map: ${trackingUrl}`,
-        title: 'SafeFall AI Live Location Sharing'
-      });
-    } catch (err) {
-      Alert.alert('Share Failed', (err as Error).message);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0D9488" />
-        <Text style={s.loadingText}>Acquiring GPS Signal...</Text>
-      </View>
-    );
-  }
-
-  // Mock historical fall location coordinates
-  const mockHistory = [
-    { latitude: 37.7750, longitude: -122.4199, timestamp: '3 days ago' },
-    { latitude: 37.7745, longitude: -122.4190, timestamp: '10 days ago' }
-  ];
+  useEffect(() => {
+    refresh().catch(() => setBusy(false));
+  }, [refresh]);
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
-      
-      {/* Title Header */}
-      <View style={s.titleRow}>
-        <View>
-          <Text style={s.headerLabel}>
-            GPS tracking
-          </Text>
-          <Text style={s.headerTitle}>
-            Live Location
-          </Text>
-        </View>
-
-        <Pressable 
-          onPress={fetchLiveLocation}
-          style={s.refreshBtn}
-        >
-          <RefreshCw size={18} color="#94A3B8" />
-        </Pressable>
-      </View>
-
-      {/* Interactive Map Layout wrapper */}
-      {location && (
-        <LiveMap 
-          latitude={location.latitude} 
-          longitude={location.longitude} 
-          address={location.address}
-          history={mockHistory}
-        />
-      )}
-
-      {/* Broadcast CTA panel */}
-      <Card style={s.shareCard}>
-        <View style={s.shareCardLeft}>
-          <Text style={s.shareTitle}>Share Tracking Access</Text>
-          <Text style={s.shareSubtitle}>
-            Broadcast encrypted GPS coords directly via SMS/Email to emergency contacts.
-          </Text>
-        </View>
+    <Screen title="Location" subtitle="Your location is only shared when an alert is sent, or when you share it yourself." refreshing={busy} onRefresh={refresh} inTabs>
+      {perm && perm !== 'granted' ? (
+        <Card tone="warning">
+          <Text style={type.heading}>Location is off for SafeFall</Text>
+          <Text style={[type.body, { marginVertical: spacing.md }]}>Without it, alerts cannot tell your caregivers where you are.</Text>
+          {perm === 'blocked' ? (
+            <Button title="Open phone settings" onPress={() => Linking.openSettings()} />
+          ) : (
+            <Button title="Allow location" onPress={async () => { await locationService.requestPermission(); refresh(); }} />
+          )}
+        </Card>
+      ) : null}
+      {busy && !loc ? <LoadingState label="Finding your location…" /> : null}
+      {loc ? <LiveMap location={loc} title="Your current location" /> : null}
+      {loc?.status === 'ok' ? (
         <Button
-          title="Share Link"
-          onPress={handleShareTracking}
+          title="Share my location"
           variant="outline"
-          size="sm"
-          style={s.shareBtn}
+          onPress={() =>
+            Share.share({ message: `${profile?.fullName ?? 'I'} shared a location via SafeFall AI: ${mapsUrl(loc.latitude, loc.longitude)}` }).catch(() => undefined)
+          }
         />
-      </Card>
-
-      {/* Fall Risk Hotspots */}
-      <Card style={s.mb6}>
-        <View style={s.sectionHeaderRow}>
-          <AlertCircle size={18} color="#F59E0B" style={s.mr2} />
-          <Text style={s.sectionTitle}>Geo-Protection Safezones</Text>
-        </View>
-        
-        <Text style={s.safezoneDesc}>
-          SafeFall AI tracks historical falls and home parameters to detect fall-prone hotspots.
-        </Text>
-
-        <View style={s.safezoneList}>
-          <View style={s.safezoneItem}>
-            <View>
-              <Text style={s.safezoneName}>Living Room Area</Text>
-              <Text style={s.safezoneDetail}>1 fall anomaly recorded</Text>
-            </View>
-            <View style={s.badgeMedium}>
-              <Text style={s.badgeMediumText}>Medium Risk</Text>
-            </View>
-          </View>
-
-          <View style={s.safezoneItemLast}>
-            <View>
-              <Text style={s.safezoneName}>Bathroom / Shower</Text>
-              <Text style={s.safezoneDetail}>0 anomalies. Floor pad installed</Text>
-            </View>
-            <View style={s.badgeSafe}>
-              <Text style={s.badgeSafeText}>Safezone</Text>
-            </View>
-          </View>
-        </View>
-      </Card>
-
-    </ScrollView>
+      ) : null}
+      {loc ? <Button title="Refresh" variant="ghost" onPress={refresh} isLoading={busy} style={{ marginTop: spacing.sm }} /> : null}
+    </Screen>
   );
 }
 
-const s = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-  },
-  loadingText: { fontSize: 14, color: '#94A3B8', marginTop: 8, fontWeight: '500' },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  headerLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#64748B',
-  },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
-  refreshBtn: {
-    padding: 8,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-  },
-  shareCard: {
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  shareCardLeft: { flex: 1, paddingRight: 12 },
-  shareTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginBottom: 2 },
-  shareSubtitle: { fontSize: 12, color: '#94A3B8', lineHeight: 16 },
-  shareBtn: { borderColor: '#475569' },
-  mb6: { marginBottom: 24 },
-  mr2: { marginRight: 8 },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  safezoneDesc: {
-    fontSize: 12,
-    color: '#94A3B8',
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  safezoneList: {},
-  safezoneItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(30,41,59,0.8)',
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  safezoneItemLast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  safezoneName: { fontSize: 12, fontWeight: '700', color: '#E2E8F0' },
-  safezoneDetail: { fontSize: 10, color: '#64748B', fontWeight: '600' },
-  badgeMedium: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(245,158,11,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.3)',
-    borderRadius: 4,
-  },
-  badgeMediumText: { fontSize: 10, fontWeight: '700', color: '#D97706', textTransform: 'uppercase' },
-  badgeSafe: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(16,185,129,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.3)',
-    borderRadius: 4,
-  },
-  badgeSafeText: { fontSize: 10, fontWeight: '700', color: '#10B981', textTransform: 'uppercase' },
-});
+function CaregiverLocation() {
+  const { activeElderlyId, relations } = useAuthStore();
+  const alerts = useCaregiverStore((s) => (activeElderlyId ? s.alertsByElder[activeElderlyId] ?? [] : []));
+  const name = relations.find((r) => r.elderlyId === activeElderlyId)?.elderlyName ?? '';
+  const withLocation = alerts.find((a) => a.location.status === 'ok');
+  return (
+    <Screen title="Location" subtitle={`${name}'s location is shared only as part of an alert.`} inTabs>
+      <ElderPicker />
+      {withLocation ? (
+        <>
+          <Text style={[type.body, { marginBottom: spacing.md }]}>From the alert on {new Date(withLocation.createdAt).toLocaleString()}:</Text>
+          <LiveMap location={withLocation.location} title="Last alert location" />
+        </>
+      ) : (
+        <EmptyState icon={<MapPin size={44} color={colors.textSubtle} />} title="No location available" body="When an alert includes a location, it will appear here." />
+      )}
+    </Screen>
+  );
+}
+
+export default function LocationScreen() {
+  const isCaregiver = useAuthStore((s) => s.profile?.role === 'caregiver');
+  return isCaregiver ? <CaregiverLocation /> : <OwnLocation />;
+}
