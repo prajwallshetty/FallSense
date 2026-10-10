@@ -1,52 +1,46 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { colors, radius, spacing } from '../../theme';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
-  accentBorder?: boolean;
-  dangerBorder?: boolean;
+  accessibilityLabel?: string;
+  tone?: 'default' | 'danger' | 'warning' | 'accent' | 'simulated';
 }
 
-export const Card: React.FC<CardProps> = ({
-  children,
-  style,
-  onPress,
-  accentBorder = false,
-  dangerBorder = false,
-}) => {
-  const borderColor = dangerBorder
-    ? 'rgba(239,68,68,0.3)'
-    : accentBorder
-      ? 'rgba(13,148,136,0.3)'
-      : '#1E293B';
+const BORDER = {
+  default: colors.border,
+  danger: colors.danger,
+  warning: colors.warning,
+  accent: colors.primary,
+  simulated: colors.simulated,
+};
 
-  const containerStyle: ViewStyle = {
-    ...styles.card,
-    borderColor,
-  };
-
+export const Card: React.FC<CardProps> = ({ children, style, onPress, accessibilityLabel, tone = 'default' }) => {
+  const base = [styles.card, { borderColor: BORDER[tone] }, style];
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={[containerStyle, style]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={({ pressed }) => [...base, pressed ? { opacity: 0.85 } : null]}
+      >
         {children}
       </Pressable>
     );
   }
-
-  return (
-    <View style={[containerStyle, style]}>
-      {children}
-    </View>
-  );
+  return <View style={base}>{children}</View>;
 };
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(30,41,59,0.4)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
   },
 });

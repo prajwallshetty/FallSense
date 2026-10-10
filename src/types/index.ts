@@ -1,79 +1,55 @@
-export type UserRole = 'elderly' | 'caregiver' | 'admin';
+// Shared domain types. Emergency incident types live in src/emergency/incidentMachine.ts,
+// BLE packet types in src/ble/protocol.ts.
+
+export type UserRole = 'elderly' | 'caregiver';
 
 export interface UserProfile {
   userId: string;
   email: string;
   role: UserRole;
   fullName: string;
+  /** E.164 format, e.g. +919876543210 */
   phone: string;
-  avatarUrl?: string;
+  medicalNotes?: string;
   bloodType?: string;
-  medicalConditions?: string;
-  birthDate?: string;
-  fcmToken?: string;
-  createdAt: string;
+  birthYear?: number | null;
+  onboardingComplete: boolean;
+  createdAt: number;
 }
 
 export interface EmergencyContact {
   contactId: string;
-  userId: string;
   name: string;
+  /** E.164 format */
   phone: string;
   relationship: string;
-  priorityOrder: number;
-}
-
-export interface Device {
-  deviceId: string;
-  userId: string;
-  macAddress: string;
-  name: string;
-  firmwareVersion: string;
-  batteryLevel: number; // 0 - 100
-  status: 'connected' | 'disconnected';
-  lastSync: string;
-  rssi?: number; // signal strength
-}
-
-export interface HealthLog {
-  logId: string; // usually YYYY-MM-DD
-  userId: string;
-  date: string; // YYYY-MM-DD
-  stepsCount: number;
-  activeMinutes: number;
-  movementScore: number; // calculated score out of 100
-}
-
-export interface FallAlert {
-  alertId: string;
-  userId: string;
-  userName: string;
-  timestamp: string;
-  location: {
-    latitude: number;
-    longitude: number;
-    address?: string;
-  };
-  status: 'pending' | 'acknowledged' | 'false_alarm' | 'escalated';
-  resolvedBy?: string;
-  resolvedAt?: string;
+  /** 1 = called/texted first */
+  priority: number;
 }
 
 export interface CaregiverRelation {
   relationId: string;
   caregiverId: string;
   elderlyId: string;
+  caregiverName: string;
   elderlyName: string;
-  linkedAt: string;
-  isActive: boolean;
+  createdAt: number;
 }
 
-export interface DeviceTelemetry {
-  accelX: number;
-  accelY: number;
-  accelZ: number;
-  gyroX: number;
-  gyroY: number;
-  gyroZ: number;
-  fallScore: number;
+export interface LinkCode {
+  code: string;
+  elderlyId: string;
+  elderlyName: string;
+  expiresAt: number;
+}
+
+/** Device status mirrored to Firestore by the elderly user's phone for caregivers to see. */
+export interface CloudDeviceStatus {
+  deviceId: string;
+  name: string;
+  firmwareVersion: string | null;
+  batteryPercent: number | null;
+  linkStatus: string;
+  lastSeenAt: number | null;
+  updatedAt: number;
 }

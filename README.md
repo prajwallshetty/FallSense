@@ -1,272 +1,187 @@
-# SafeFall AI - Wearable Fall Detection Companion
+# SafeFall AI: wearable fall detection companion
 
-SafeFall AI is a complete, production-ready native mobile application built using **Expo (React Native)** and **TypeScript**. It serves as a healthcare companion monitoring an elderly patient wearing a smartwatch containing an ESP32 microcontroller and MPU6050 accelerometer/gyroscope. 
+SafeFall AI is an Expo (React Native, TypeScript) app that pairs with a **Waveshare
+ESP32-S3-Touch-LCD-1.28** watch running SafeFall firmware. The **watch detects falls locally**
+with its QMI8658 IMU. The phone presents the alert and countdown, captures location, and
+notifies linked caregivers through Firebase.
 
-The application scans, pairs, and listens to BLE telemetry packets sent by the wearable. In the event of a sudden acceleration spike (fall), the app launches a global fullscreen warning overlay, plays sirens, starts a 30-second escalation timer, and dispatches the live GPS coordinates of the patient to priority emergency contacts via SMS and Firebase Cloud Messaging.
+> **Safety notice.** SafeFall AI is a prototype safety aid, **not a certified medical device**.
+> Falls can be missed and false alarms happen. It does not contact emergency services
+> automatically and is not a substitute for them.
 
----
+## How it works
 
-## 📱 Features
-
-1. **Secure Authentication**: Caregiver and Elderly profile sign-ups, secure Session Store, Google Single-Sign-On integrations, and developer sandbox quick-login bypasses.
-2. **Interactive Onboarding**: Introductory guides and step-by-step Bluetooth, Location, and Push Notification permission prompts.
-3. **Continuous Fall Sensing (BLE)**: Scans, connects, and streams telemetry (Acc/Gyro) from the wearable. Toggles a high-fidelity **Simulator Mode** to test alerts without hardware.
-4. **Emergency Overlay Screen**: Red visual flash overlays, native vibration sequences, audio siren alarms, 30s auto-escalations, false-alarm cancel buttons, and immediate emergency dispatch hotkeys.
-5. **GPS Tracking & Maps**: Live geocoded street addresses, background tracking, historical fall hotspot pins, and native Apple/Google Map app deep links.
-6. **Caregiver Hub Switchboard**: Profile switcher enabling caregivers to link multiple elderly parents by email and toggle active telemetry tracking.
-7. **Health & Step Analytics**: Weekly and monthly step counters and activity scores rendered via performant SVG charts.
-8. **Responder Quick Actions**: One-click native Telephone Call and SMS composer shortcuts on responder profile cards.
-9. **Admin Panel Console**: App-wide dashboard summarizing total users, battery warnings, active devices, and database maintenance scripts.
-
----
-
-## 🛠️ Technology Stack
-
-- **Framework**: Expo SDK 51 & React Native
-- **Language**: TypeScript
-- **Navigation**: Expo Router (nested layout trees)
-- **Styling**: NativeWind (Tailwind CSS v3)
-- **Local State**: Zustand (persistent session caches)
-- **Data Querying**: TanStack React Query v5
-- **Authentication**: Firebase Authentication
-- **Database**: Cloud Firestore
-- **Location**: Expo Location & geocoding integrations
-- **Local Storage**: Expo Secure Store
-- **Vector Assets**: React Native SVG & Lucide Icons
-
----
-
-## 📐 Architecture Diagrams
-
-### App Architecture
 ```mermaid
-graph TD
-    subgraph Wearable ["Wearable Smartwatch"]
-        ESP32[ESP32 MCU] --> MPU6050[MPU6050 Sensor]
-        ESP32 --> BLE_TX[BLE Transmitter]
-    end
-
-    subgraph CompanionApp ["SafeFall AI Mobile App"]
-        direction TB
-        BLE_RX[BLE Service/Manager] <--> Zustand[Zustand Local State]
-        Zustand <--> ReactQuery[React Query caching]
-        Zustand --> UI[React Native UI / Screens]
-        
-        subgraph Services ["Service Layer"]
-            FirebaseAuth[Firebase Authentication]
-            Firestore[Cloud Firestore Service]
-            FCM[Firebase Cloud Messaging]
-            LocationService[Expo Location Service]
-            SecureStore[Expo Secure Store]
-        end
-    end
-
-    subgraph Backend ["Cloud Infrastructure"]
-        FirebaseCloud[Firebase Console]
-        FirebaseCloud <--> FirestoreDB[(Firestore Database)]
-        FirebaseCloud <--> AuthDB[(Auth Registry)]
-    end
-
-    BLE_TX -. BLE Link .-> BLE_RX
-    Services <--> FirebaseCloud
-    ReactQuery <--> Services
+graph LR
+  subgraph Watch["Waveshare ESP32-S3-Touch-LCD-1.28"]
+    IMU[QMI8658 IMU] --> FD[On-watch fall detection]
+    BTN[BOOT button: cancel / SOS] --> FD
+    FD --> GATT[BLE GATT server, protocol v1]
+  end
+  subgraph Phone["Wearer's phone: SafeFall AI"]
+    GATT -- notify / read / write --> CM[ConnectionManager<br/>timeout, reconnect, stale detection]
+    CM --> SM[Incident state machine<br/>dedupe, persisted]
+    SM --> UI[Full-screen alert + countdown]
+    SM --> LOC[GPS capture]
+    SM --> SYNC[Offline-safe sync]
+  end
+  SYNC --> FS[(Cloud Firestore<br/>security rules)]
+  FS --> CF[Cloud Function] --> FCM[FCM push] --> CG[Caregiver's phone]
+  CG -- acknowledge / resolve --> FS
 ```
 
-### Component Hierarchy
-```mermaid
-graph TD
-    subgraph Components ["Reusable Component Hierarchy"]
-        Button[Button: Custom Large Touch Target]
-        Card[Card: Glassmorphic Shadow Wrapper]
-        StatusBadge[StatusBadge: Connection / Battery]
-        BatteryRing[BatteryRing: SVG circular progress]
-        LiveStatusCard[LiveStatusCard: Live Acc/Gyro dashboard]
-        AnalyticsChart[AnalyticsChart: Custom SVG charts]
-        LiveMap[LiveMap: SVG Map Contour & Native Deeplink]
-    end
+Incident lifecycle (`src/emergency/incidentMachine.ts`, enforced again in `firestore.rules`):
 
-    subgraph Screens ["Screens / Routing Layout"]
-        AuthLayout["(auth) Layout"] --> LoginScreen[Login Screen]
-        AuthLayout --> SignupScreen[Signup Screen]
-        
-        OnboardingLayout["(onboarding) Layout"] --> WelcomeScreen[Welcome Screen]
-        OnboardingLayout --> PermissionScreen[Permission Screen]
-        OnboardingLayout --> ContactsSetup[Contacts Setup Screen]
-        
-        AppLayout["(app) Layout (Tabs)"] --> Dashboard[Dashboard Tab]
-        AppLayout --> Health[Health Tab]
-        AppLayout --> Location[Location/Map Tab]
-        AppLayout --> Devices[Devices/BLE Tab]
-        AppLayout --> Settings[Settings Tab]
-
-        Caregiver["Caregiver Screen"]
-        AlertOverlay["Fall Alert Overlay Screen"]
-    end
-
-    Dashboard --> StatusBadge
-    Dashboard --> BatteryRing
-    Dashboard --> LiveStatusCard
-    Health --> AnalyticsChart
-    Location --> LiveMap
+```
+NORMAL → possible_fall → countdown → escalated → acknowledged → resolved
+                 └──────────┴──→ cancelled
 ```
 
-### ER Database Schema
-```mermaid
-erDiagram
-    USERS ||--o| PROFILES : "has profile details"
-    USERS ||--o{ EMERGENCY_CONTACTS : "defines"
-    USERS ||--o{ DEVICES : "pairs"
-    USERS ||--o{ HEALTH_LOGS : "logs steps/activity"
-    USERS ||--o{ FALL_ALERTS : "triggers"
-    
-    USERS ||--o{ CAREGIVER_RELATIONS : "monitored by (Elderly)"
-    USERS ||--o{ CAREGIVER_RELATIONS : "monitors (Caregiver)"
-    
-    USERS {
-      string uid PK
-      string email
-      string role "elderly | caregiver | admin"
-      timestamp createdAt
-    }
-    
-    PROFILES {
-      string userId FK
-      string fullName
-      string phone
-      string avatarUrl
-      string bloodType
-      string medicalConditions
-      string birthDate
-    }
+* **Possible fall:** the watch saw free fall plus impact. If the watch sends no follow-up
+  within 20 s, the phone starts the countdown anyway (fail-safe).
+* **Countdown:** default 30 s; *I'm OK, cancel* or a short press on the watch cancels it.
+* **Escalated:** uploaded to Firestore. The Cloud Function pushes to caregivers. The wearer sees
+  call/SMS buttons for their contacts. The app only reports what it can confirm (e.g. "accepted
+  by the push service", never "delivered").
+* **Acknowledged:** a caregiver tapped *I'm on it*.
+* **Resolved:** closed by the wearer or a caregiver (false alarm / assisted).
+* **Manual SOS:** the big red button on the dashboard (with confirmation), or a 2 s long-press on
+  the watch, escalates immediately.
 
-    EMERGENCY_CONTACTS {
-      string contactId PK
-      string userId FK
-      string name
-      string phone
-      string relationship
-      int priorityOrder
-    }
+Incidents are persisted on the phone, so killing the app never silently loses one. An overdue
+countdown escalates on the next launch. Repeated BLE packets are deduplicated by
+`(device, eventId, eventType)`.
 
-    DEVICES {
-      string deviceId PK
-      string userId FK
-      string macAddress
-      string name
-      string firmwareVersion
-      int batteryLevel
-      string status "connected | disconnected"
-      timestamp lastSync
-    }
+## Documentation
 
-    HEALTH_LOGS {
-      string logId PK
-      string userId FK
-      date logDate
-      int stepsCount
-      int activeMinutes
-      int movementScore
-    }
+| Doc | Contents |
+|---|---|
+| [docs/AUDIT.md](docs/AUDIT.md) | Audit of the original repository (findings with file paths and severity) |
+| [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md) | BLE protocol v1: UUIDs, packet layouts, units, commands, timing, security, firmware status |
+| [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) | Firebase project setup, data model, rules, indexes, push, offline behaviour |
+| [docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md) | Automated / simulator / physical-device test checklist |
+| [firmware/README.md](firmware/README.md) | Building and flashing the reference watch firmware |
 
-    FALL_ALERTS {
-      string alertId PK
-      string userId FK
-      timestamp timestamp
-      geopoint location
-      string status "pending | acknowledged | false_alarm | escalated"
-      string resolvedBy FK
-      timestamp resolvedAt
-    }
+## Project layout
 
-    CAREGIVER_RELATIONS {
-      string relationId PK
-      string caregiverId FK "Users.uid"
-      string elderlyId FK "Users.uid"
-      timestamp linkedAt
-      boolean isActive
-    }
+```
+src/
+  app/                 Expo Router screens: (auth), (onboarding), (app)/(tabs), alert
+  ble/                 protocol.ts (v1 codec), connectionManager.ts, plx/simulated transports
+  emergency/           incidentMachine.ts (pure state machine), alertDoc.ts, labels.ts
+  services/            firebase, session, sync, emergency effects, location, notifications,
+                       permissions, BLE wiring, call/SMS hand-off
+  store/               Zustand stores (auth, device, incidents [persisted], activity, caregiver)
+  components/          UI kit (theme-based) + dashboard, map, emergency, linking, forms
+  config/env.ts        typed EXPO_PUBLIC_* configuration
+  __tests__/           Jest tests
+firestore.rules, firestore.indexes.json, firebase.json
+functions/             Cloud Function: push to caregivers on escalation
+firestore-tests/       Security-rules tests (Firestore emulator)
+firmware/              Reference ESP32-S3 firmware + host tests
 ```
 
----
-
-## 🚀 Installation & Running
+## Windows setup & commands (PowerShell)
 
 ### Prerequisites
+* Node.js 20 or 22 LTS, Git.
+* For local Android builds: Android Studio (SDK + an emulator or a USB-debugging phone), **JDK 17**,
+  and `ANDROID_HOME` set (e.g. `C:\Users\<you>\AppData\Local\Android\Sdk`).
+* BLE needs a **development build**. Expo Go does not include the Bluetooth module, and the app
+  says so instead of faking a watch.
 
-Ensure you have the following installed on your machine:
-- **Node.js** (v18 or higher)
-- **npm** or **yarn**
-- **Expo Go** app on your iOS/Android testing device, OR Android Studio Emulator / iOS Simulator.
-
-### 1. Clone & Set Up Directory
-In your terminal, navigate to the project folder:
-```bash
-npm install
+### Install & verify
+```powershell
+git clone https://github.com/prajwallshetty/FallSense.git
+cd FallSense
+git checkout claude/kind-meitner-2ebrqc
+npm ci
+copy .env.example .env
+notepad .env                 # fill in your Firebase web config (see docs/FIREBASE_SETUP.md)
+npm run verify               # typecheck + lint + unit tests
 ```
 
-### 2. Configure Environment Keys
-Create a `.env` file based on the template:
-```bash
-cp .env.example .env
+### Run on an Android phone or emulator (development build)
+```powershell
+# Optional: copy google-services.json into the project root for push notifications
+npx expo run:android         # builds and installs the dev client, then starts Metro
+# Later sessions (dev client already installed):
+npm run start:dev-client
 ```
-Update `.env` with your active Firebase keys if connecting to the cloud.
+To try the BLE simulator, set `EXPO_PUBLIC_ENABLE_DEV_TOOLS=true` in `.env` and restart Metro.
 
-### 3. Run the Development Server
-Start the bundler:
-```bash
-npx expo start
+### Firestore rules tests (needs Java 11+)
+```powershell
+cd firestore-tests; npm install; npm test; cd ..
 ```
-- Scan the QR code with your phone (using Expo Go for Android, or the Camera app for iOS).
-- Press `a` in the terminal to launch the Android emulator.
-- Press `i` in the terminal to launch the iOS Simulator.
 
----
+### Release builds with EAS (recommended)
+`.env` is git-ignored and **not uploaded** to EAS, so set the variables in EAS:
+```powershell
+npm install -g eas-cli
+eas login
+eas init                                             # creates the EAS project
+eas env:create --environment production --name EXPO_PUBLIC_FIREBASE_API_KEY --value "<value>" --visibility plaintext
+#   ...repeat for every EXPO_PUBLIC_FIREBASE_* value (and preview/development environments)
+eas env:create --environment production --name GOOGLE_SERVICES_JSON --type file --value .\google-services.json
+eas build --profile preview --platform android       # installable APK (dev tools forced off)
+eas build --profile production --platform android    # AAB for Google Play (dev tools forced off)
+```
 
-## 🧪 Testing the BLE Simulator
+### Local release build (without EAS)
+```powershell
+npx expo prebuild --platform android --clean
+cd android
+.\gradlew.bat assembleRelease     # APK: android\app\build\outputs\apk\release\app-release.apk
+.\gradlew.bat bundleRelease       # AAB: android\app\build\outputs\bundle\release\app-release.aab
+cd ..
+```
+The Expo template signs local release builds with the debug keystore. For Play Store
+uploads, configure your own upload keystore
+(<https://reactnative.dev/docs/signed-apk-android>) or use EAS-managed credentials.
 
-SafeFall AI includes a robust sandbox simulation pipeline to facilitate immediate user-interface testing without requiring an active physical smartwatch.
+### Deploy the backend
+```powershell
+npm install -g firebase-tools
+firebase login
+copy .firebaserc.example .firebaserc     # set your project id
+firebase deploy --only firestore:rules,firestore:indexes
+cd functions; npm install; npm run build; cd ..
+firebase deploy --only functions
+```
 
-1. **Login bypass**: Open the app, and tap **"Elderly Profile"** or **"Caregiver Profile"** under the Developer Sandbox panel on the Login Screen.
-2. **Authorize Permissions**: Click "Enable" on location, notifications, and bluetooth. Tap **"Continue"**.
-3. **Complete Onboarding**: Input an emergency contact and click **"Save Contact & Finish"** to enter the Dashboard.
-4. **Verify Telemetry**:
-   - Go to the **Devices** tab.
-   - Toggle **Smartwatch Sandbox Simulator** on.
-   - Click **"Start Bluetooth Scan"** and tap **"Pair"** on "SafeFall Smartwatch v1".
-   - Switch back to the **Dashboard** tab. You should see live telemetry signals reading ACCEL / GYRO values.
-5. **Simulate Fall Alert**:
-   - On the **Dashboard**, scroll to **Simulator Sandbox Tools** and click **"Simulate Smartwatch Fall Alert"**.
-   - The app will instantly launch the full-screen flashing **Fall Detected alert** overlay.
-   - A siren log is sent, the device vibrates, and the 30-second auto-escalation countdown begins.
-   - Test canceling the alarm (False alarm) or clicking **"Dispatch Responders Now"** to confirm notifications work.
+## Configuration
 
----
+See `.env.example`. Key settings:
 
-## 📦 Production Builds (Expo EAS)
+| Variable | Purpose |
+|---|---|
+| `EXPO_PUBLIC_FIREBASE_*` | Firebase web config (identifiers, not secrets) |
+| `EXPO_PUBLIC_ENABLE_DEV_TOOLS` | `true` enables the BLE simulator. Forced `false` in the preview and production EAS profiles |
+| `EXPO_PUBLIC_FALL_COUNTDOWN_SECONDS` | Countdown before escalation (10-120, default 30) |
+| `EXPO_PUBLIC_EMERGENCY_SERVICES_NUMBER` | Shows a "Call emergency services" button (never auto-dialled) |
+| `EXPO_PUBLIC_DEFAULT_COUNTRY_CODE` | Country code applied to phone numbers typed without one |
 
-To build stand-alone `.apk`, `.aab` (Android), or `.ipa` (iOS) binaries for release:
+Secrets (service-account keys, SMS gateway keys) must **never** go in `EXPO_PUBLIC_*`; anything
+there ships inside the APK. Server secrets belong in Cloud Functions secrets.
 
-1. **Install EAS CLI globally**:
-   ```bash
-   npm install -g eas-cli
-   ```
-2. **Log in to your Expo account**:
-   ```bash
-   eas login
-   ```
-3. **Initialize EAS Project Config**:
-   ```bash
-   eas project:init
-   ```
-4. **Configure production builds (eas.json)**:
-   ```bash
-   eas build:configure
-   ```
-5. **Trigger Android Build**:
-   ```bash
-   eas build --platform android
-   ```
-6. **Trigger iOS Build**:
-   ```bash
-   eas build --platform ios
-   ```
+## Developer simulator
+
+The simulator exists only when `EXPO_PUBLIC_ENABLE_DEV_TOOLS=true`. It emits real protocol-v1
+byte packets, which pass through the same parser, dedupe and state machine as hardware.
+Simulated devices and incidents are **always labelled**, never uploaded as caregiver-visible
+watch status, and their incidents **never leave the phone**. A simulator pairing left over from a
+dev build is discarded by builds without dev tools.
+
+## Remaining work and known limitations
+
+* **Background monitoring:** the BLE link is maintained while the app is foregrounded or recently
+  backgrounded. Android may suspend it afterwards, so an Android foreground service is needed for
+  reliable 24/7 operation (not implemented). Until then, keep the app open and exempt it from
+  battery optimisation.
+* **Firmware:** the reference firmware has not been compiled or flashed in CI. Verify the pins,
+  IMU registers and battery divider, and **tune the fall thresholds with real recordings**. The
+  display UI, touch cancel and passkey pairing are firmware TODOs (see docs/BLE_PROTOCOL.md).
+* **No automatic SMS/calls:** escalation notifies caregivers by push. SMS and calls go through
+  the phone's own apps when the wearer taps them.
+* **iOS** builds are configured but untested.

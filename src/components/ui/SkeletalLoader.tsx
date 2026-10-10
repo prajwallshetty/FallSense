@@ -1,60 +1,27 @@
-import React, { useEffect } from 'react';
-import { View, Animated, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, DimensionValue, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '../../theme';
 
 interface SkeletalLoaderProps {
-  width?: number | string;
-  height?: number | string;
+  width?: DimensionValue;
+  height?: DimensionValue;
   borderRadius?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
-export const SkeletalLoader: React.FC<SkeletalLoaderProps> = ({
-  width = '100%',
-  height = 20,
-  borderRadius = 8,
-  style,
-}) => {
-  const pulseAnim = new Animated.Value(0.3);
-
+export const SkeletalLoader: React.FC<SkeletalLoaderProps> = ({ width = '100%', height = 20, borderRadius = 8, style }) => {
+  const pulse = useRef(new Animated.Value(0.35)).current;
   useEffect(() => {
-    const animation = Animated.loop(
+    const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.8,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0.3,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
+        Animated.timing(pulse, { toValue: 0.8, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 800, useNativeDriver: true }),
+      ]),
     );
-    animation.start();
-
-    return () => animation.stop();
-  }, [pulseAnim]);
-
-  return (
-    <Animated.View
-      style={[
-        {
-          width: width as any,
-          height: height as any,
-          borderRadius,
-          opacity: pulseAnim,
-        },
-        styles.loader,
-        style,
-      ]}
-    />
-  );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+  return <Animated.View accessibilityLabel="Loading" style={[styles.loader, { width, height, borderRadius, opacity: pulse }, style]} />;
 };
 
-import { StyleSheet } from 'react-native';
-const styles = StyleSheet.create({
-  loader: {
-    backgroundColor: '#1E293B', // dark:bg-slate-800 equivalent
-  },
-});
+const styles = StyleSheet.create({ loader: { backgroundColor: colors.surfaceRaised } });

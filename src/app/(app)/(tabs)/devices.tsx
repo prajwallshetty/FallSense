@@ -1,323 +1,193 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Switch, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Bluetooth, Watch } from 'lucide-react-native';
 import { useDeviceStore } from '../../../store/deviceStore';
+import { useAuthStore } from '../../../store/authStore';
+import { useCaregiverStore } from '../../../store/caregiverStore';
 import { bleService } from '../../../services/bleService';
+import { BlePermissionResult, checkBlePermissions, requestBlePermissions } from '../../../services/permissions';
+import { SIMULATED_DEVICE_ID } from '../../../ble/simulatedTransport';
+import { ScannedPeripheral } from '../../../ble/transport';
+import { LINK_STATUS, timeAgo } from '../../../emergency/labels';
+import { Screen } from '../../../components/ui/Screen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
-import { Device } from '../../../types';
-import { Cpu, Bluetooth, RefreshCw, Smartphone, ShieldCheck, XCircle } from 'lucide-react-native';
+import { EmptyState, ErrorBanner, SimulatedBadge } from '../../../components/ui/Feedback';
+import { LiveStatusCard } from '../../../components/Dashboard/LiveStatusCard';
+import { ElderPicker } from '../../../components/Caregiver/ElderPicker';
+import { colors, spacing, TOUCH_MIN, type } from '../../../theme';
 
-export default function DevicesScreen() {
-  const { 
-    pairedDevice, 
-    isConnected, 
-    scannedDevices, 
-    isScanning, 
-    isSimulatorMode, 
-    setScanning, 
-    setScannedDevices, 
-    setSimulatorMode 
-  } = useDeviceStore();
-
-  const [scanTriggered, setScanTriggered] = useState(false);
-
-  const startDiscovery = async () => {
-    setScannedDevices([]);
-    setScanning(true);
-    setScanTriggered(true);
-
-    try {
-      await bleService.startScan((device) => {
-        const currentList = useDeviceStore.getState().scannedDevices;
-        if (!currentList.some(d => d.deviceId === device.deviceId)) {
-          setScannedDevices([...currentList, device]);
-        }
-      });
-
-      // Automatically terminate scan after 6 seconds to save device radio power
-      setTimeout(async () => {
-        await bleService.stopScan();
-        setScanning(false);
-      }, 6000);
-    } catch (err) {
-      Alert.alert('Scan Failed', (err as Error).message);
-      setScanning(false);
-    }
-  };
-
-  const handleConnectDevice = async (device: Device) => {
-    await bleService.stopScan();
-    setScanning(false);
-    
-    try {
-      await bleService.connect(device);
-      Alert.alert('Connection Successful', `${device.name} is now monitoring falls.`);
-    } catch (err) {
-      Alert.alert('Connection Error', `Failed to pair with ${device.name}: ${(err as Error).message}`);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    Alert.alert(
-      'Disconnect Device',
-      'Are you sure you want to disconnect from your SafeFall Smartwatch?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Disconnect', 
-          style: 'destructive',
-          onPress: async () => {
-            await bleService.disconnect();
-          } 
-        }
-      ]
-    );
-  };
-
+function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
-      
-      {/* Header */}
-      <View style={s.headerContainer}>
-        <Text style={s.headerLabel}>
-          Hardware Interface
-        </Text>
-        <Text style={s.headerTitle}>
-          Smartwatch Manager
-        </Text>
-      </View>
-
-      {/* Connection State Card */}
-      {pairedDevice ? (
-        <Card style={s.mb4}>
-          <View style={s.deviceHeaderRow}>
-            <View style={s.row}>
-              <View style={s.iconBgTeal}>
-                <Cpu size={24} color="#0D9488" />
-              </View>
-              <View>
-                <Text style={s.deviceName}>{pairedDevice.name}</Text>
-                <Text style={s.deviceMac}>{pairedDevice.macAddress}</Text>
-              </View>
-            </View>
-            <StatusBadge status={isConnected ? 'connected' : 'disconnected'} />
-          </View>
-
-          <View style={s.detailsSection}>
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Firmware Build</Text>
-              <Text style={s.detailValue}>v{pairedDevice.firmwareVersion}</Text>
-            </View>
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Battery Level</Text>
-              <Text style={[s.detailValue, pairedDevice.batteryLevel < 20 && s.textRed]}>
-                {pairedDevice.batteryLevel}%
-              </Text>
-            </View>
-            <View style={s.detailRowLast}>
-              <Text style={s.detailLabel}>BLE Status</Text>
-              <Text style={s.detailValue}>Monitoring Active</Text>
-            </View>
-          </View>
-
-          <Button
-            title="Disconnect Watch"
-            onPress={handleDisconnect}
-            variant="outline"
-            size="md"
-            style={s.disconnectBtn}
-          />
-        </Card>
-      ) : (
-        <Card style={s.emptyCard}>
-          <Bluetooth size={44} color="#475569" style={s.mb3} />
-          <Text style={s.emptyTitle}>No Wearable Paired</Text>
-          <Text style={s.emptySubtitle}>
-            Scan and connect to the SafeFall Smartwatch to activate automatic fall monitoring and vitals telemetry.
-          </Text>
-          <Button
-            title="Start Bluetooth Scan"
-            onPress={startDiscovery}
-            variant="primary"
-            size="lg"
-            style={s.fullWidth}
-          />
-        </Card>
-      )}
-
-      {/* Bluetooth scan results list */}
-      {scanTriggered && (
-        <View style={s.mb6}>
-          <View style={s.scanHeader}>
-            <Text style={s.scanTitle}>Nearby BLE Peripherals</Text>
-            {isScanning && <ActivityIndicator size="small" color="#0D9488" />}
-          </View>
-
-          {scannedDevices.length > 0 ? (
-            scannedDevices.map((dev) => (
-              <Card key={dev.deviceId} style={s.scanResultCard}>
-                <View style={s.row}>
-                  <Smartphone size={20} color="#94A3B8" style={s.mr3} />
-                  <View>
-                    <Text style={s.scanDevName}>{dev.name}</Text>
-                    <Text style={s.scanDevMac}>{dev.macAddress}</Text>
-                  </View>
-                </View>
-                <Button
-                  title="Pair"
-                  onPress={() => handleConnectDevice(dev)}
-                  variant="primary"
-                  size="sm"
-                />
-              </Card>
-            ))
-          ) : (
-            !isScanning && (
-              <Card style={s.noResultsCard}>
-                <XCircle size={28} color="#334155" style={s.mb2} />
-                <Text style={s.noResultsText}>No matching peripherals found.</Text>
-              </Card>
-            )
-          )}
-        </View>
-      )}
-
-      {/* Toggle Simulator Mode */}
-      <Card style={s.simulatorCard}>
-        <View style={s.simulatorLeft}>
-          <ShieldCheck size={20} color="#0D9488" style={s.mr3} />
-          <View style={s.flex1}>
-            <Text style={s.simulatorTitle}>Smartwatch Sandbox Simulator</Text>
-            <Text style={s.simulatorSubtitle}>
-              Simulate BLE packets without needing physical hardware boards.
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={isSimulatorMode}
-          onValueChange={setSimulatorMode}
-          trackColor={{ false: '#94A3B8', true: '#0D9488' }}
-          thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
-        />
-      </Card>
-
-    </ScrollView>
+    <View style={styles.detail}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
   );
 }
 
-const s = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-  headerContainer: { marginBottom: 24 },
-  headerLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#64748B',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  mb2: { marginBottom: 8 },
-  mb3: { marginBottom: 12 },
-  mb4: { marginBottom: 16 },
-  mb6: { marginBottom: 24 },
-  mr3: { marginRight: 12 },
-  flex1: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  fullWidth: { width: '100%' },
-  deviceHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconBgTeal: {
-    padding: 12,
-    backgroundColor: 'rgba(13,148,136,0.1)',
-    borderRadius: 16,
-    marginRight: 12,
-  },
-  deviceName: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  deviceMac: { fontSize: 10, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase' },
-  detailsSection: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(30,41,59,0.8)',
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailRowLast: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  detailLabel: { fontSize: 12, color: '#94A3B8' },
-  detailValue: { fontSize: 12, fontWeight: '700', color: '#E2E8F0' },
-  textRed: { color: '#EF4444' },
-  disconnectBtn: {
-    width: '100%',
-    borderColor: 'rgba(239,68,68,0.3)',
-  },
-  emptyCard: {
-    marginBottom: 16,
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
-  emptySubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-    lineHeight: 18,
-    marginBottom: 24,
-  },
-  scanHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  scanTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  scanResultCard: {
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  scanDevName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  scanDevMac: { fontSize: 10, color: '#64748B', fontWeight: '700', textTransform: 'uppercase' },
-  noResultsCard: { alignItems: 'center', paddingVertical: 24 },
-  noResultsText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  simulatorCard: {
-    backgroundColor: 'rgba(15,23,42,0.5)',
-    borderColor: 'rgba(30,41,59,0.8)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    marginBottom: 24,
-  },
-  simulatorLeft: {
-    flex: 1,
-    paddingRight: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  simulatorTitle: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
-  simulatorSubtitle: { fontSize: 10, color: '#64748B', lineHeight: 14, marginTop: 2 },
+function ScanResult({ p, onPair, busy }: { p: ScannedPeripheral; onPair: () => void; busy: boolean }) {
+  const simulated = p.id === SIMULATED_DEVICE_ID;
+  return (
+    <Card tone={simulated ? 'simulated' : p.looksLikeSafeFall ? 'accent' : 'default'}>
+      {simulated ? <SimulatedBadge /> : null}
+      <View style={[styles.row, simulated ? { marginTop: spacing.sm } : null]}>
+        <Watch size={26} color={p.looksLikeSafeFall ? colors.primary : colors.textSubtle} />
+        <View style={{ flex: 1 }}>
+          <Text style={type.bodyStrong}>{p.name ?? 'Unnamed device'}</Text>
+          <Text style={styles.meta}>{p.looksLikeSafeFall ? 'SafeFall watch' : 'Not identified as a SafeFall watch'}{p.rssi != null ? ` · signal ${p.rssi} dBm` : ''}</Text>
+        </View>
+      </View>
+      <Button title={busy ? 'Connecting…' : 'Connect'} onPress={onPair} isLoading={busy} variant={p.looksLikeSafeFall ? 'primary' : 'outline'} style={{ marginTop: spacing.md }} />
+    </Card>
+  );
+}
+
+function ElderlyDevices() {
+  const d = useDeviceStore();
+  const [perm, setPerm] = useState<BlePermissionResult | null>(null);
+  const [pairingId, setPairingId] = useState<string | null>(null);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const unavailable = bleService.unavailableReason;
+
+  useEffect(() => {
+    checkBlePermissions().then(setPerm).catch(() => undefined);
+    return () => bleService.stopScan();
+  }, []);
+
+  const scan = async () => {
+    setPairError(null);
+    const p = await requestBlePermissions();
+    setPerm(p);
+    if (!p.granted && !bleService.simulatorEnabled) return;
+    bleService.startScan();
+  };
+
+  const pair = async (p: ScannedPeripheral) => {
+    setPairingId(p.id);
+    setPairError(null);
+    try {
+      await bleService.pair(p);
+    } catch (e) {
+      setPairError((e as Error).message);
+    } finally {
+      setPairingId(null);
+    }
+  };
+
+  if (d.paired) {
+    return (
+      <Screen title="Your watch" inTabs>
+        <LiveStatusCard />
+        <Card>
+          <Text style={[type.heading, { marginBottom: spacing.md }]}>Details</Text>
+          <Detail label="Name" value={d.paired.name} />
+          <Detail label="Firmware" value={d.firmwareVersion ?? 'Unknown'} />
+          <Detail label="Battery voltage" value={d.batteryMillivolts != null ? `${(d.batteryMillivolts / 1000).toFixed(2)} V (estimate)` : 'Unknown'} />
+          <Detail label="Motion sensor" value={d.imuOk == null ? 'Unknown' : d.imuOk ? 'Working' : 'Error reported by watch'} />
+          <Detail label="Paired" value={new Date(d.paired.pairedAt).toLocaleDateString()} />
+          {d.protocolErrors > 0 ? <Detail label="Unreadable packets" value={`${d.protocolErrors} (last: ${d.lastProtocolError})`} /> : null}
+        </Card>
+        <Button
+          title="Remove this watch"
+          variant="outline"
+          onPress={() =>
+            Alert.alert('Remove watch?', 'This phone will stop receiving fall alerts from the watch until you pair it again.', [
+              { text: 'Keep watch', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: () => bleService.unpair() },
+            ])
+          }
+        />
+      </Screen>
+    );
+  }
+
+  const safeFall = d.scanResults.filter((r) => r.looksLikeSafeFall);
+  const others = d.scanResults.filter((r) => !r.looksLikeSafeFall);
+
+  return (
+    <Screen title="Pair your watch" subtitle="Turn on your SafeFall watch and keep it close to this phone." inTabs>
+      {unavailable && !bleService.simulatorEnabled ? <ErrorBanner message={unavailable} /> : null}
+      {perm && !perm.granted && perm.message ? (
+        <Card tone="warning">
+          <Text style={type.body}>{perm.message}</Text>
+          {perm.blocked ? <Button title="Open phone settings" variant="outline" onPress={() => Linking.openSettings()} style={{ marginTop: spacing.md }} /> : null}
+        </Card>
+      ) : null}
+      {d.scanError ? <ErrorBanner message={d.scanError} onRetry={scan} /> : null}
+      {pairError ? <ErrorBanner message={pairError} /> : null}
+
+      <Button
+        title={d.scanning ? 'Searching…' : 'Search for watch'}
+        size="lg"
+        icon={d.scanning ? <ActivityIndicator color={colors.primaryText} /> : <Bluetooth size={24} color={colors.primaryText} />}
+        onPress={d.scanning ? () => bleService.stopScan() : scan}
+        style={{ marginBottom: spacing.xl }}
+      />
+
+      {safeFall.map((p) => (
+        <ScanResult key={p.id} p={p} busy={pairingId === p.id} onPair={() => pair(p)} />
+      ))}
+      {!d.scanning && d.scanResults.length > 0 && safeFall.length === 0 ? (
+        <Card tone="warning">
+          <Text style={type.body}>No SafeFall watch found. Make sure it is switched on and running SafeFall firmware, then search again.</Text>
+        </Card>
+      ) : null}
+      {others.length > 0 ? (
+        <Pressable onPress={() => setShowAll((v) => !v)} accessibilityRole="button" style={styles.toggle}>
+          <Text style={styles.toggleText}>{showAll ? 'Hide other devices' : `Show ${others.length} other nearby device${others.length === 1 ? '' : 's'}`}</Text>
+        </Pressable>
+      ) : null}
+      {showAll ? others.map((p) => <ScanResult key={p.id} p={p} busy={pairingId === p.id} onPair={() => pair(p)} />) : null}
+      {!d.scanning && d.scanResults.length === 0 ? (
+        <EmptyState icon={<Watch size={44} color={colors.textSubtle} />} title="No watch found yet" body="Tap Search for watch. Pairing requires Bluetooth and the Nearby devices permission." />
+      ) : null}
+    </Screen>
+  );
+}
+
+function CaregiverDevices() {
+  const { activeElderlyId, relations } = useAuthStore();
+  const devices = useCaregiverStore((s) => (activeElderlyId ? s.devicesByElder[activeElderlyId] ?? [] : []));
+  const name = relations.find((r) => r.elderlyId === activeElderlyId)?.elderlyName ?? 'them';
+  return (
+    <Screen title="Their watch" subtitle={`Status reported by ${name}'s phone.`} inTabs>
+      <ElderPicker />
+      {devices.length === 0 ? (
+        <EmptyState icon={<Watch size={44} color={colors.textSubtle} />} title="No watch status yet" body="It appears once their phone connects to their SafeFall watch." />
+      ) : (
+        devices.map((dev) => {
+          const link = LINK_STATUS[dev.linkStatus as keyof typeof LINK_STATUS] ?? { label: dev.linkStatus, tone: 'neutral' as const };
+          const old = Date.now() - dev.updatedAt > 30 * 60 * 1000;
+          return (
+            <Card key={dev.deviceId}>
+              <Text style={type.heading}>{dev.name}</Text>
+              <StatusBadge label={old ? `Last known: ${link.label}` : link.label} tone={old ? 'warning' : link.tone} style={{ marginVertical: spacing.md }} />
+              <Detail label="Battery" value={dev.batteryPercent != null ? `${dev.batteryPercent}%` : 'Unknown'} />
+              <Detail label="Firmware" value={dev.firmwareVersion ?? 'Unknown'} />
+              <Detail label="Last data from watch" value={timeAgo(dev.lastSeenAt)} />
+              <Detail label="Status updated" value={timeAgo(dev.updatedAt)} />
+            </Card>
+          );
+        })
+      )}
+    </Screen>
+  );
+}
+
+export default function DevicesScreen() {
+  const isCaregiver = useAuthStore((s) => s.profile?.role === 'caregiver');
+  return isCaregiver ? <CaregiverDevices /> : <ElderlyDevices />;
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  meta: { fontSize: 15, color: colors.textSubtle, marginTop: 2 },
+  detail: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border },
+  detailLabel: { fontSize: 16, color: colors.textSubtle },
+  detailValue: { fontSize: 16, color: colors.text, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  toggle: { minHeight: TOUCH_MIN, justifyContent: 'center', alignItems: 'center' },
+  toggleText: { color: colors.primary, fontSize: 16, fontWeight: '700' },
 });

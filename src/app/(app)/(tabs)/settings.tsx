@@ -1,267 +1,123 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable, Alert, Share, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import { ChevronRight, User, Users, Phone, ShieldCheck, Info, LogOut, FlaskConical } from 'lucide-react-native';
 import { useAuthStore } from '../../../store/authStore';
+import { signOutEverywhere, unsyncedIncidentCount } from '../../../services/session';
+import { env } from '../../../config/env';
+import { formatPhone } from '../../../utils/validation';
+import { Screen } from '../../../components/ui/Screen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { 
-  User, 
-  Users, 
-  Settings2, 
-  LogOut, 
-  ChevronRight, 
-  Bell, 
-  ShieldCheck, 
-  Languages, 
-  FileText, 
-  Download, 
-  UserCog 
-} from 'lucide-react-native';
+import { colors, spacing, TOUCH_MIN, type } from '../../../theme';
+
+function Row({ icon, label, detail, onPress }: { icon: React.ReactNode; label: string; detail?: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={detail ? `${label}. ${detail}` : label} style={({ pressed }) => [styles.row, pressed ? { opacity: 0.7 } : null]}>
+      {icon}
+      <View style={{ flex: 1 }}>
+        <Text style={type.bodyStrong}>{label}</Text>
+        {detail ? <Text style={styles.detail}>{detail}</Text> : null}
+      </View>
+      <ChevronRight size={24} color={colors.textSubtle} />
+    </Pressable>
+  );
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { profile, relations } = useAuthStore();
+  const [busy, setBusy] = useState(false);
+  if (!profile) return null;
+  const isElderly = profile.role === 'elderly';
 
-  const handleLogout = () => {
+  const signOut = () => {
+    const pending = unsyncedIncidentCount();
     Alert.alert(
-      'Sign Out',
-      'Are you sure you want to log out of SafeFall AI?',
+      'Sign out?',
+      pending > 0
+        ? `${pending} alert${pending === 1 ? ' has' : 's have'} not reached the server yet. Signing out now may lose ${pending === 1 ? 'it' : 'them'}. Connect to the internet first if you can.`
+        : isElderly
+          ? 'Your watch will be disconnected from this phone and fall alerts will stop until you sign in again.'
+          : 'This phone will stop receiving alerts.',
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Sign Out', 
+        { text: 'Stay signed in', style: 'cancel' },
+        {
+          text: 'Sign out',
           style: 'destructive',
           onPress: async () => {
-            await logout();
-            router.replace('/(auth)/login');
-          } 
-        }
-      ]
+            setBusy(true);
+            try {
+              await signOutEverywhere();
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
     );
   };
 
-  const handleDataExport = () => {
-    Alert.alert('Data Privacy Export', 'We are preparing your health telemetry archives. This will download a package containing all steps and fall coordinates logs in JSON format.', [
-      { text: 'Cancel' },
-      { text: 'Download', onPress: () => Alert.alert('Download Started', 'Archived file is saving to your local documents directory.') }
-    ]);
-  };
-
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }} style={s.scrollView}>
-      
-      {/* Header */}
-      <View style={s.headerContainer}>
-        <Text style={s.headerLabel}>
-          Preferences
-        </Text>
-        <Text style={s.headerTitle}>
-          Settings Console
-        </Text>
-      </View>
+    <Screen title="Settings" inTabs>
+      <Card onPress={() => router.push('/(app)/profile')} accessibilityLabel="Edit your profile">
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
+          <View style={styles.avatar}>
+            <User size={30} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={type.heading}>{profile.fullName}</Text>
+            <Text style={styles.detail}>{profile.email}</Text>
+            <Text style={styles.detail}>{formatPhone(profile.phone)} · {isElderly ? 'Watch wearer' : 'Caregiver'}</Text>
+          </View>
+          <ChevronRight size={24} color={colors.textSubtle} />
+        </View>
+      </Card>
 
-      {/* Profile Overview Card */}
-      <Card style={s.mb4}>
-        <View style={s.profileRow}>
-          <View style={s.row}>
-            <View style={s.profileIconBg}>
-              <User size={24} color="#0D9488" />
-            </View>
-            <View>
-              <Text style={s.profileName}>{user?.fullName}</Text>
-              <Text style={s.profileEmail}>{user?.email}</Text>
-              <Text style={s.profileRole}>{user?.role}</Text>
-            </View>
+      <Card style={{ paddingVertical: spacing.sm }}>
+        {isElderly ? (
+          <Row icon={<Phone size={26} color={colors.primary} />} label="Emergency contacts" detail="People you can call or text from an alert" onPress={() => router.push('/(app)/contacts')} />
+        ) : null}
+        <Row
+          icon={<Users size={26} color={colors.primary} />}
+          label={isElderly ? 'Caregivers' : 'People I care for'}
+          detail={relations.length ? relations.map((r) => (isElderly ? r.caregiverName : r.elderlyName)).join(', ') : 'Nobody linked yet'}
+          onPress={() => router.push('/(app)/caregiver')}
+        />
+        <Row icon={<ShieldCheck size={26} color={colors.primary} />} label="Permissions" detail="Bluetooth, location and notifications" onPress={() => Linking.openSettings()} />
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <Info size={24} color={colors.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={type.bodyStrong}>About SafeFall AI</Text>
+            <Text style={[type.body, { marginTop: 4 }]}>
+              A prototype safety aid. It is not a certified medical device and does not contact emergency services by itself. Falls can be missed and false alarms can happen.
+            </Text>
+            <Text style={[styles.detail, { marginTop: spacing.sm }]}>Version {Constants.expoConfig?.version ?? 'unknown'}</Text>
           </View>
         </View>
       </Card>
 
-      {/* Core Configurations list */}
-      <View style={s.mb6}>
-        <Text style={s.sectionLabel}>Application Features</Text>
-        
-        <Card style={s.menuCard}>
-          {/* Emergency contacts settings */}
-          <Pressable 
-            onPress={() => router.push('/contacts')}
-            style={s.menuItemBorder}
-          >
-            <View style={s.row}>
-              <Users size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Emergency Responders</Text>
-            </View>
-            <ChevronRight size={16} color="#94A3B8" />
-          </Pressable>
-
-          {/* Caregiver Portal (Visible to all or conditional) */}
-          <Pressable 
-            onPress={() => router.push('/caregiver')}
-            style={s.menuItemBorder}
-          >
-            <View style={s.row}>
-              <UserCog size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Caregiver Dashboard</Text>
-            </View>
-            <ChevronRight size={16} color="#94A3B8" />
-          </Pressable>
-
-          {/* Admin Dashboard */}
-          <Pressable 
-            onPress={() => router.push('/admin')}
-            style={s.menuItemLast}
-          >
-            <View style={s.row}>
-              <ShieldCheck size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Admin Analytics Hub</Text>
-            </View>
-            <ChevronRight size={16} color="#94A3B8" />
-          </Pressable>
+      {env.devToolsEnabled ? (
+        <Card tone="simulated">
+          <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
+            <FlaskConical size={24} color={colors.simulated} />
+            <Text style={[type.bodyStrong, { color: colors.simulated, flex: 1 }]}>Developer tools are enabled in this build</Text>
+          </View>
+          <Text style={[type.body, { marginTop: spacing.sm }]}>The watch simulator appears in the Watch tab search results. Never ship a release with EXPO_PUBLIC_ENABLE_DEV_TOOLS=true.</Text>
         </Card>
-      </View>
+      ) : null}
 
-      {/* System Preferences */}
-      <View style={s.mb6}>
-        <Text style={s.sectionLabel}>System Preferences</Text>
-        
-        <Card style={s.menuCard}>
-          
-          <Pressable style={s.menuItemBorder}>
-            <View style={s.row}>
-              <Bell size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Alert Preferences</Text>
-            </View>
-            <Text style={s.menuItemValue}>SMS & Push</Text>
-          </Pressable>
-
-          <Pressable style={s.menuItemBorder}>
-            <View style={s.row}>
-              <Languages size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Language Selection</Text>
-            </View>
-            <Text style={s.menuItemValue}>English (US)</Text>
-          </Pressable>
-
-          <Pressable 
-            onPress={handleDataExport}
-            style={s.menuItemLast}
-          >
-            <View style={s.row}>
-              <Download size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemText}>Data Privacy Archives</Text>
-            </View>
-            <ChevronRight size={16} color="#94A3B8" />
-          </Pressable>
-        </Card>
-      </View>
-
-      {/* Privacy and Policies links */}
-      <View style={s.mb8}>
-        <Text style={s.sectionLabel}>Privacy & Support</Text>
-        <Card style={s.menuCard}>
-          <Pressable 
-            onPress={() => Alert.alert('Privacy Policy', 'Full medical HIPAA data safety terms and conditions.')}
-            style={s.menuItemLast}
-          >
-            <View style={s.row}>
-              <FileText size={18} color="#94A3B8" style={s.mr3} />
-              <Text style={s.menuItemTextLight}>Privacy Policy terms</Text>
-            </View>
-          </Pressable>
-        </Card>
-      </View>
-
-      {/* Logout button */}
-      <Button
-        title="Sign Out Account"
-        onPress={handleLogout}
-        variant="danger"
-        size="lg"
-        style={s.logoutBtn}
-      />
-
-    </ScrollView>
+      <Button title="Sign out" variant="danger" size="lg" isLoading={busy} icon={<LogOut size={22} color="#FFFFFF" />} onPress={signOut} />
+    </Screen>
   );
 }
 
-const s = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-  headerContainer: { marginBottom: 24 },
-  headerLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#64748B',
-  },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
-  mb4: { marginBottom: 16 },
-  mb6: { marginBottom: 24 },
-  mb8: { marginBottom: 32 },
-  mr3: { marginRight: 12 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  profileIconBg: {
-    padding: 12,
-    backgroundColor: 'rgba(13,148,136,0.1)',
-    borderRadius: 16,
-    marginRight: 14,
-  },
-  profileName: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  profileEmail: { fontSize: 12, color: '#64748B' },
-  profileRole: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0D9488',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginTop: 2,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  menuCard: {
-    padding: 0,
-    borderColor: '#1E293B',
-    overflow: 'hidden',
-  },
-  menuItemBorder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  menuItemLast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  menuItemText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  menuItemTextLight: { fontSize: 14, fontWeight: '700', color: '#CBD5E1' },
-  menuItemValue: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginRight: 4,
-  },
-  logoutBtn: { width: '100%', marginBottom: 40 },
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: TOUCH_MIN + 16, paddingVertical: spacing.sm },
+  detail: { fontSize: 15, color: colors.textSubtle, marginTop: 2 },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
 });

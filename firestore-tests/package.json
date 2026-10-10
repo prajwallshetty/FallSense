@@ -1,0 +1,14 @@
+{
+  "name": "safefall-firestore-rules-tests",
+  "private": true,
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-safefall \"jest --runInBand\"",
+    "test:only": "jest --runInBand"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^14.0.0",
+    "jest": "~29.7.0"
+  }
+}

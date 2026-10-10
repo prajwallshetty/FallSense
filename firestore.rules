@@ -1,0 +1,217 @@
+rules_version = '2';
+
+// SafeFall AI Firestore Security Rules.
+// Authorisation is enforced here, not in the app. Tested by firestore-tests/ against the emulator.
+//
+// Access model:
+//   * Every user reads/writes their own profile.
+//   * A caregiver can read an elderly user's data only while relations/{caregiverUid}_{elderlyUid}
+//     exists. That document can only be created with a valid, unexpired, single-use link code
+//     the elderly user generated (consent), and either party can delete it (revoke).
+//   * Alerts are created only by the elderly user's own phone. Linked caregivers may only
+//     acknowledge/resolve. State changes must follow the incident state machine.
+//   * `dispatch` on alerts is written only by the Cloud Function (Admin SDK bypasses rules).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function myRole() { return get(userPath(request.auth.uid)).data.role; }
+    function relationPath(caregiverId, elderlyId) {
+      return /databases/$(database)/documents/relations/$(caregiverId + '_' + elderlyId);
+    }
+    function isLinkedCaregiverOf(elderlyId) {
+      return signedIn() && exists(relationPath(request.auth.uid, elderlyId));
+    }
+    function canAccessElder(elderlyId) { return isSelf(elderlyId) || isLinkedCaregiverOf(elderlyId); }
+
+    function isE164(p) { return p is string && p.matches('^[+][1-9][0-9]{7,14}$'); }
+    function strLen(s, lo, hi) { return s is string && s.size() >= lo && s.size() <= hi; }
+    function optStr(d, key, hi) { return !(key in d) || d[key] == null || strLen(d[key], 0, hi); }
+    function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ---------------------------------------------------------------- users
+    match /users/{uid} {
+      allow get: if canAccessElder(uid);
+      allow list: if false;
+
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['email', 'role', 'fullName', 'phone', 'onboardingComplete', 'createdAt'])
+        && request.resource.data.role in ['elderly', 'caregiver']   // 'admin' cannot be self-assigned
+        && request.resource.data.email == request.auth.token.email
+        && strLen(request.resource.data.fullName, 1, 80)
+        && isE164(request.resource.data.phone)
+        && request.resource.data.onboardingComplete == false
+        && request.resource.data.createdAt is int;
+
+      allow update: if isSelf(uid)
+        && !changedKeys().hasAny(['role', 'email', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['email', 'role', 'fullName', 'phone', 'onboardingComplete', 'createdAt',
+                                                 'medicalNotes', 'bloodType', 'birthYear'])
+        && strLen(request.resource.data.fullName, 1, 80)
+        && isE164(request.resource.data.phone)
+        && request.resource.data.onboardingComplete is bool
+        && optStr(request.resource.data, 'medicalNotes', 500)
+        && optStr(request.resource.data, 'bloodType', 10)
+        && (!('birthYear' in request.resource.data) || request.resource.data.birthYear == null
+            || (request.resource.data.birthYear is int && request.resource.data.birthYear >= 1900 && request.resource.data.birthYear <= 2100));
+
+      allow delete: if false;
+
+      match /contacts/{contactId} {
+        function validContact() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['name', 'phone', 'relationship', 'priority', 'updatedAt'])
+            && strLen(d.name, 1, 80)
+            && isE164(d.phone)
+            && strLen(d.relationship, 0, 40)
+            && d.priority is int && d.priority >= 1 && d.priority <= 50
+            && d.updatedAt is int;
+        }
+        allow read: if canAccessElder(uid);
+        allow create, update: if canAccessElder(uid) && validContact();
+        allow delete: if canAccessElder(uid);
+      }
+
+      match /devices/{deviceId} {
+        allow read: if canAccessElder(uid);
+        allow create, update: if isSelf(uid)
+          && request.resource.data.keys().hasOnly(['deviceId', 'name', 'firmwareVersion', 'batteryPercent', 'linkStatus', 'lastSeenAt', 'updatedAt'])
+          && strLen(request.resource.data.deviceId, 1, 64)
+          && strLen(request.resource.data.name, 0, 64)
+          && strLen(request.resource.data.linkStatus, 1, 20)
+          && request.resource.data.updatedAt is int
+          && (request.resource.data.batteryPercent == null
+              || (request.resource.data.batteryPercent is int && request.resource.data.batteryPercent >= 0 && request.resource.data.batteryPercent <= 100));
+        allow delete: if isSelf(uid);
+      }
+
+      // FCM tokens: only the owner. The Cloud Function reads them with the Admin SDK.
+      match /private/{docId} {
+        allow read, write: if isSelf(uid) && docId == 'push'
+          && (request.method == 'get' || request.method == 'delete'
+              || (request.resource.data.keys().hasOnly(['tokens', 'updatedAt'])
+                  && request.resource.data.tokens is list && request.resource.data.tokens.size() <= 10));
+      }
+    }
+
+    // ---------------------------------------------------------------- link codes
+    match /linkCodes/{code} {
+      // Readable only by exact id (the code is the secret); never listable.
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && myRole() == 'elderly'
+        && code.matches('^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$')
+        && request.resource.data.keys().hasOnly(['elderlyId', 'elderlyName', 'createdAt', 'expiresAt'])
+        && request.resource.data.elderlyId == request.auth.uid
+        && strLen(request.resource.data.elderlyName, 1, 80)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(30, 'm');
+
+      allow update: if false;
+
+      // The elderly user may revoke; a caregiver may delete it only in the same batch that
+      // creates their relation (single use).
+      allow delete: if signedIn()
+        && (resource.data.elderlyId == request.auth.uid
+            || existsAfter(relationPath(request.auth.uid, resource.data.elderlyId)));
+    }
+
+    // ---------------------------------------------------------------- caregiver relations
+    match /relations/{relationId} {
+      function linkCodeIsValid(d) {
+        let path = /databases/$(database)/documents/linkCodes/$(d.linkCode);
+        return d.linkCode is string
+          && exists(path)
+          && get(path).data.elderlyId == d.elderlyId
+          && get(path).data.elderlyName == d.elderlyName
+          && get(path).data.expiresAt > request.time;
+      }
+
+      allow read: if signedIn()
+        && (resource.data.caregiverId == request.auth.uid || resource.data.elderlyId == request.auth.uid);
+
+      allow create: if signedIn()
+        && myRole() == 'caregiver'
+        && request.resource.data.keys().hasOnly(['caregiverId', 'elderlyId', 'caregiverName', 'elderlyName', 'linkCode', 'createdAt'])
+        && request.resource.data.caregiverId == request.auth.uid
+        && request.resource.data.elderlyId != request.auth.uid
+        && relationId == request.auth.uid + '_' + request.resource.data.elderlyId
+        && strLen(request.resource.data.caregiverName, 1, 80)
+        && request.resource.data.createdAt is int
+        && linkCodeIsValid(request.resource.data);
+
+      allow update: if false;
+      allow delete: if signedIn()
+        && (resource.data.caregiverId == request.auth.uid || resource.data.elderlyId == request.auth.uid);
+    }
+
+    // ---------------------------------------------------------------- alerts
+    match /alerts/{alertId} {
+      function validTransition(from, to) {
+        return from == to
+          || (from == 'possible_fall' && to in ['countdown', 'cancelled', 'escalated'])
+          || (from == 'countdown' && to in ['cancelled', 'escalated'])
+          || (from == 'escalated' && to in ['acknowledged', 'resolved'])
+          || (from == 'acknowledged' && to == 'resolved');
+      }
+
+      function validAlert(d) {
+        return d.keys().hasOnly(['elderlyId', 'elderlyName', 'source', 'deviceId', 'deviceEventId', 'state',
+                                 'createdAt', 'updatedAt', 'countdownEndsAt', 'escalatedAt', 'peakAccelG',
+                                 'location', 'cancelledBy', 'acknowledgedBy', 'acknowledgedAt', 'resolvedBy',
+                                 'resolvedAt', 'resolution', 'timeline', 'clientVersion', 'dispatch'])
+          && d.elderlyId is string
+          && strLen(d.elderlyName, 0, 80)
+          && d.source in ['wearable', 'wearable_sos', 'manual_sos']
+          && d.state in ['possible_fall', 'countdown', 'escalated', 'acknowledged', 'cancelled', 'resolved']
+          && d.createdAt is int
+          && d.updatedAt is int
+          && d.location is map
+          && d.location.status in ['pending', 'ok', 'permission_denied', 'services_disabled', 'unavailable', 'timeout']
+          && d.timeline is list && d.timeline.size() <= 100
+          && (d.get('resolution', null) == null || d.resolution in ['false_alarm', 'assisted', 'other']);
+      }
+
+      function caregiverUpdateOnly() {
+        let d = request.resource.data;
+        return changedKeys().hasOnly(['state', 'acknowledgedBy', 'acknowledgedAt', 'resolvedBy', 'resolvedAt',
+                                      'resolution', 'updatedAt', 'timeline'])
+          && d.state in ['acknowledged', 'resolved']
+          && (!changedKeys().hasAny(['acknowledgedBy']) || d.acknowledgedBy.uid == request.auth.uid)
+          && (!changedKeys().hasAny(['resolvedBy']) || d.resolvedBy == request.auth.uid);
+      }
+
+      allow read: if signedIn() && canAccessElder(resource.data.elderlyId);
+
+      allow create: if signedIn()
+        && request.resource.data.elderlyId == request.auth.uid
+        && alertId.matches('^' + request.auth.uid + '_[A-Za-z0-9_-]+$')
+        && !('dispatch' in request.resource.data)
+        && validAlert(request.resource.data);
+
+      allow update: if signedIn()
+        && canAccessElder(resource.data.elderlyId)
+        && request.resource.data.elderlyId == resource.data.elderlyId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.source == resource.data.source
+        && !changedKeys().hasAny(['dispatch'])
+        && validTransition(resource.data.state, request.resource.data.state)
+        && validAlert(request.resource.data)
+        && (isSelf(resource.data.elderlyId) || caregiverUpdateOnly());
+
+      allow delete: if false;
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

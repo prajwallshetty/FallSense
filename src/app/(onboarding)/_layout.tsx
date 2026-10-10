@@ -1,11 +1,6 @@
 import { Stack } from 'expo-router';
+import { colors } from '../../theme';
 
 export default function OnboardingLayout() {
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="welcome" />
-      <Stack.Screen name="permissions" />
-      <Stack.Screen name="contact-setup" />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />;
 }

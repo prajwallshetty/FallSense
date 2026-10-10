@@ -1,0 +1,10 @@
+// https://docs.expo.dev/guides/using-eslint/
+const { defineConfig } = require('eslint/config');
+const expoConfig = require('eslint-config-expo/flat');
+
+module.exports = defineConfig([
+  expoConfig,
+  {
+    ignores: ['dist/*', 'functions/lib/*', 'functions/node_modules/*', 'firestore-tests/node_modules/*', 'firmware/*', 'coverage/*'],
+  },
+]);

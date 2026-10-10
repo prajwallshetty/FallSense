@@ -5,7 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
+    "scheme": "safefall",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -15,13 +16,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.safefall.ai",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "SafeFall AI needs constant Bluetooth access to monitor fall data and sensor telemetry from your smartwatch device.",
-        "NSBluetoothPeripheralUsageDescription": "SafeFall AI connects to your smartwatch using Bluetooth to detect falls in real-time.",
-        "NSLocationWhenInUseUsageDescription": "SafeFall AI uses location services to find your address during fall alerts and share emergency location with contacts.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "SafeFall AI monitors location continuously in the background to ensure that if a fall occurs, the exact coordinates can be sent immediately to caregivers.",
+        "NSLocationWhenInUseUsageDescription": "SafeFall AI attaches your location to a fall alert or SOS so your caregivers know where to find you.",
         "UIBackgroundModes": [
-          "bluetooth-central",
-          "location",
           "remote-notification"
         ]
       }
@@ -35,15 +31,14 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "BLUETOOTH",
-        "BLUETOOTH_ADMIN",
-        "BLUETOOTH_CONNECT",
-        "BLUETOOTH_SCAN",
-        "BLUETOOTH_ADVERTISE",
-        "WAKE_LOCK",
-        "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -51,14 +46,35 @@
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
       [
         "expo-location",
         {
-          "locationAlwaysPermission": "Allow SafeFall AI to access location services in the background to send help when a fall is detected."
+          "locationWhenInUsePermission": "SafeFall AI attaches your location to a fall alert or SOS so your caregivers know where to find you.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
-      "expo-secure-store"
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ],
+          "neverForLocation": false,
+          "bluetoothAlwaysPermission": "SafeFall AI connects to your SafeFall watch over Bluetooth to receive fall alerts, battery and status."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0D9488"
+        }
+      ]
     ],
-    "scheme": "safefall"
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }
