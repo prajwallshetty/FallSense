@@ -9,9 +9,9 @@ import { useIncidentStore } from '../store/incidentStore';
 import { useCaregiverStore } from '../store/caregiverStore';
 import { endLocalSession, startSession, signOutEverywhere } from '../services/session';
 import { isOpen } from '../emergency/incidentMachine';
-import { missingFirebaseKeys } from '../config/env';
 import { Button } from '../components/ui/Button';
 import { colors, spacing, type } from '../theme';
+import { UserRole } from '../types';
 import { installWebAlertPolyfill } from '../utils/webAlertPolyfill';
 
 installWebAlertPolyfill();
@@ -29,21 +29,16 @@ function Splash({ label }: { label: string }) {
   );
 }
 
-function ConfigError() {
-  return (
-    <View style={[styles.center, { alignItems: 'stretch' }]}>
-      <Text style={type.title}>Setup required</Text>
-      <Text style={[type.body, { marginTop: spacing.md }]}>
-        This build has no Firebase configuration, so sign-in and caregiver alerts cannot work. Add these values to your
-        .env file (see .env.example and docs/FIREBASE_SETUP.md) and rebuild:
-      </Text>
-      {missingFirebaseKeys().map((k) => (
-        <Text key={k} style={[type.bodyStrong, { marginTop: spacing.sm }]}>
-          • EXPO_PUBLIC_FIREBASE_{k.replace(/[A-Z]/g, (c) => `_${c}`).toUpperCase()}
-        </Text>
-      ))}
-    </View>
-  );
+/**
+ * Screens that only one role may open. Everything else is shared: the dashboard, history,
+ * location, watch and settings tabs all render role-appropriate content internally, and
+ * /(app)/caregiver is the two-sided linking screen both roles use.
+ */
+const ELDERLY_ONLY = new Set(['alert', 'contacts']);
+
+function canRoleOpen(role: UserRole, segments: string[]): boolean {
+  const target = segments.find((s) => ELDERLY_ONLY.has(s));
+  return target === undefined || role === 'elderly';
 }
 
 function ProfileError({ message }: { message: string }) {
@@ -59,7 +54,7 @@ function ProfileError({ message }: { message: string }) {
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const { status, profile, error, initialize, relations } = useAuthStore();
+  const { status, profile, error, initialize, relations, isDemo } = useAuthStore();
   const active = useIncidentStore((s) => s.active);
   const hydrated = useIncidentStore((s) => s.hydrated);
 
@@ -67,16 +62,17 @@ export default function RootLayout() {
 
   // Start per-user services once the profile is known; stop them if the session ends.
   useEffect(() => {
-    if (status === 'ready' && profile) startSession(profile).catch(() => undefined);
+    if (status === 'ready' && profile) startSession(profile, isDemo).catch(() => undefined);
     if (status === 'signed_out') endLocalSession().catch(() => undefined);
-  }, [status, profile]);
+  }, [status, profile, isDemo]);
 
-  // Caregivers: live alerts for every linked elderly user.
+  // Caregivers: live alerts for every linked elderly user. Demo caregivers have no Firestore
+  // credentials, so the subscription is skipped rather than left to fail and retry.
   useEffect(() => {
-    if (status === 'ready' && profile?.role === 'caregiver') {
+    if (status === 'ready' && !isDemo && profile?.role === 'caregiver') {
       useCaregiverStore.getState().watch(relations.map((r) => r.elderlyId));
     }
-  }, [status, profile?.role, relations]);
+  }, [status, isDemo, profile?.role, relations]);
 
   // Navigation guard.
   useEffect(() => {
@@ -90,6 +86,9 @@ export default function RootLayout() {
       if (!profile.onboardingComplete && group !== '(onboarding)') router.replace('/(onboarding)/welcome');
       else if (profile.onboardingComplete && (group === '(auth)' || group === '(onboarding)' || group === undefined)) {
         router.replace('/(app)/(tabs)');
+      } else if (!canRoleOpen(profile.role, parts)) {
+        // Blocks the other role's screens whether reached by navigation or a deep link.
+        router.replace('/(app)/(tabs)');
       }
     }
   }, [status, profile, segments, router]);
@@ -101,8 +100,9 @@ export default function RootLayout() {
   }, [incidentOpen, status, hydrated, segments, router]);
 
   let overlay: React.ReactNode = null;
-  if (status === 'config_error') overlay = <ConfigError />;
-  else if (status === 'initializing' || status === 'loading_profile') overlay = <Splash label={status === 'initializing' ? 'Starting…' : 'Loading your account…'} />;
+  // No Firebase-configuration wall here: a missing config leaves the login screen reachable
+  // so demo mode still works. The login screen explains what real sign-in needs.
+  if (status === 'initializing' || status === 'loading_profile') overlay = <Splash label={status === 'initializing' ? 'Starting…' : 'Loading your account…'} />;
   else if (status === 'error') overlay = <ProfileError message={error ?? 'Unknown error'} />;
 
   // The navigator always stays mounted (expo-router requirement); blocking states overlay it.

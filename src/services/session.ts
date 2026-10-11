@@ -2,6 +2,7 @@
 
 import { pendingSync } from '../emergency/incidentMachine';
 import { useActivityStore } from '../store/activityStore';
+import { useAuthStore } from '../store/authStore';
 import { useCaregiverStore } from '../store/caregiverStore';
 import { useDeviceStore } from '../store/deviceStore';
 import { useIncidentStore } from '../store/incidentStore';
@@ -29,12 +30,22 @@ export function waitForHydration(store: PersistedStore): Promise<void> {
 
 let currentUid: string | null = null;
 let currentRole: UserProfile['role'] | null = null;
+let currentIsDemo = false;
 
-export async function startSession(profile: UserProfile): Promise<void> {
-  if (currentUid === profile.userId && currentRole === profile.role) return;
+/**
+ * Starts the services this profile needs.
+ *
+ * In demo mode the local safety pipeline runs for real - BLE pairing, the watch link, fall
+ * detection and the alert countdown are untouched - but services that write to Firestore
+ * (incident sync, push-token registration) are skipped, because a demo account has no
+ * Firebase credentials and those calls would only fail and retry.
+ */
+export async function startSession(profile: UserProfile, isDemo = false): Promise<void> {
+  if (currentUid === profile.userId && currentRole === profile.role && currentIsDemo === isDemo) return;
   if (currentUid) await stopServices();
   currentUid = profile.userId;
   currentRole = profile.role;
+  currentIsDemo = isDemo;
   await Promise.all([waitForHydration(useIncidentStore), waitForHydration(useDeviceStore)]);
 
   // Incidents persisted for a different account must never be uploaded under this one.
@@ -44,10 +55,10 @@ export async function startSession(profile: UserProfile): Promise<void> {
 
   if (profile.role === 'elderly') {
     emergencyService.start();
-    syncService.start();
+    if (!isDemo) syncService.start();
     bleService.resume().catch(() => undefined);
   }
-  notificationService.registerPushToken(profile.userId).catch(() => undefined);
+  if (!isDemo) notificationService.registerPushToken(profile.userId).catch(() => undefined);
 }
 
 async function stopServices() {
@@ -72,6 +83,7 @@ export async function endLocalSession(): Promise<void> {
   useDeviceStore.getState().resetLive();
   currentUid = null;
   currentRole = null;
+  currentIsDemo = false;
 }
 
 /**
@@ -79,6 +91,13 @@ export async function endLocalSession(): Promise<void> {
  * the watch and clears local per-user data.
  */
 export async function signOutEverywhere(): Promise<void> {
+  // Demo sessions have nothing on the server: clear local state and the stored demo session
+  // only. Calling Firebase here would surface an auth error on a successful sign-out.
+  if (currentIsDemo) {
+    await endLocalSession();
+    await useAuthStore.getState().signOutDemo();
+    return;
+  }
   if (currentRole === 'elderly') await syncService.flush().catch(() => undefined);
   await notificationService.unregisterPushToken();
   await endLocalSession();
