@@ -18,11 +18,23 @@ export const ShareCodePanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [usedNotice, setUsedNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!code) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
+  }, [code]);
+
+  // When a caregiver redeems the code it is deleted: stop showing it as valid.
+  useEffect(() => {
+    if (!code) return;
+    return firebaseService.watchLinkCode(code.code, (exists) => {
+      if (!exists) {
+        setCode(null);
+        setUsedNotice('Your code was used. The new caregiver is listed above.');
+      }
+    });
   }, [code]);
 
   const expired = code ? code.expiresAt <= now : false;
@@ -31,6 +43,7 @@ export const ShareCodePanel: React.FC = () => {
     if (!profile) return;
     setBusy(true);
     setError(null);
+    setUsedNotice(null);
     try {
       setCode(await firebaseService.createLinkCode(profile));
     } catch (e) {
@@ -49,6 +62,7 @@ export const ShareCodePanel: React.FC = () => {
         Create a one-time code and give it to the person who should receive your alerts. Only share it with someone you trust.
       </Text>
       {error ? <ErrorBanner message={error} onRetry={create} /> : null}
+      {usedNotice ? <Text style={[type.bodyStrong, { color: colors.success, marginBottom: spacing.md }]} accessibilityLiveRegion="polite">{usedNotice}</Text> : null}
       {code && !expired ? (
         <View style={styles.codeBox} accessible accessibilityLabel={`Code ${code.code.split('').join(' ')}`}>
           <Text style={styles.code}>{code.code.slice(0, 4)} {code.code.slice(4)}</Text>

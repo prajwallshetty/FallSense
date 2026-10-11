@@ -109,6 +109,11 @@ export default function AlertScreen() {
           <StatusBadge label={st.label} tone={st.tone} style={{ alignSelf: 'center', marginTop: spacing.md }} />
         </View>
 
+        {incident.timeline.some((t) => t.type === 'delivered_late') ? (
+          <Text style={[styles.explain, { marginBottom: spacing.lg, fontWeight: '700' }]}>
+            {incident.timeline.find((t) => t.type === 'delivered_late')?.detail}. The phone was probably out of range.
+          </Text>
+        ) : null}
         {secondsLeft != null ? (
           <View style={styles.countdown} accessible accessibilityLabel={`Caregivers will be alerted in ${secondsLeft} seconds`}>
             <Text style={styles.countdownNumber}>{secondsLeft}</Text>

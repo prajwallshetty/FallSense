@@ -12,6 +12,9 @@ import { isOpen } from '../emergency/incidentMachine';
 import { missingFirebaseKeys } from '../config/env';
 import { Button } from '../components/ui/Button';
 import { colors, spacing, type } from '../theme';
+import { installWebAlertPolyfill } from '../utils/webAlertPolyfill';
+
+installWebAlertPolyfill();
 
 function Splash({ label }: { label: string }) {
   return (
