@@ -8,10 +8,11 @@ import { useAuthStore } from '../store/authStore';
 import { useIncidentStore } from '../store/incidentStore';
 import { useCaregiverStore } from '../store/caregiverStore';
 import { endLocalSession, startSession, signOutEverywhere } from '../services/session';
+import { notificationService } from '../services/notificationService';
+import { canRoleOpen } from '../utils/routeAccess';
 import { isOpen } from '../emergency/incidentMachine';
 import { Button } from '../components/ui/Button';
 import { colors, spacing, type } from '../theme';
-import { UserRole } from '../types';
 import { installWebAlertPolyfill } from '../utils/webAlertPolyfill';
 
 installWebAlertPolyfill();
@@ -29,18 +30,6 @@ function Splash({ label }: { label: string }) {
   );
 }
 
-/**
- * Screens that only one role may open. Everything else is shared: the dashboard, history,
- * location, watch and settings tabs all render role-appropriate content internally, and
- * /(app)/caregiver is the two-sided linking screen both roles use.
- */
-const ELDERLY_ONLY = new Set(['alert', 'contacts']);
-
-function canRoleOpen(role: UserRole, segments: string[]): boolean {
-  const target = segments.find((s) => ELDERLY_ONLY.has(s));
-  return target === undefined || role === 'elderly';
-}
-
 function ProfileError({ message }: { message: string }) {
   return (
     <View style={[styles.center, { alignItems: 'stretch' }]}>
@@ -54,7 +43,7 @@ function ProfileError({ message }: { message: string }) {
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const { status, profile, error, initialize, relations, isDemo } = useAuthStore();
+  const { status, profile, error, initialize, relations, authSource } = useAuthStore();
   const active = useIncidentStore((s) => s.active);
   const hydrated = useIncidentStore((s) => s.hydrated);
 
@@ -62,17 +51,23 @@ export default function RootLayout() {
 
   // Start per-user services once the profile is known; stop them if the session ends.
   useEffect(() => {
-    if (status === 'ready' && profile) startSession(profile, isDemo).catch(() => undefined);
+    if (status === 'ready' && profile && authSource) startSession(profile, authSource).catch(() => undefined);
     if (status === 'signed_out') endLocalSession().catch(() => undefined);
-  }, [status, profile, isDemo]);
+  }, [status, profile, authSource]);
 
   // Caregivers: live alerts for every linked elderly user. Demo caregivers have no Firestore
   // credentials, so the subscription is skipped rather than left to fail and retry.
   useEffect(() => {
-    if (status === 'ready' && !isDemo && profile?.role === 'caregiver') {
+    if (status === 'ready' && authSource === 'firebase' && profile?.role === 'caregiver') {
       useCaregiverStore.getState().watch(relations.map((r) => r.elderlyId));
     }
-  }, [status, isDemo, profile?.role, relations]);
+  }, [status, authSource, profile?.role, relations]);
+
+  // Caretakers: confirm received alerts and open the incident when one is tapped.
+  useEffect(() => {
+    if (authSource !== 'cloud' || profile?.role !== 'caregiver') return;
+    return notificationService.listenForCaretakerAlerts((id) => router.push({ pathname: '/(app)/incident/[id]', params: { id } }));
+  }, [authSource, profile?.role, router]);
 
   // Navigation guard.
   useEffect(() => {
@@ -108,7 +103,7 @@ export default function RootLayout() {
   // The navigator always stays mounted (expo-router requirement); blocking states overlay it.
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade' }}>
           <Stack.Screen name="index" />

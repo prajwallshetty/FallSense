@@ -12,9 +12,11 @@ import { RedeemCodePanel, ShareCodePanel } from '../../../components/Linking/Lin
 import { colors, spacing, type } from '../../../theme';
 
 export default function CaregiverLinksScreen() {
-  const { profile, relations, activeElderlyId, setActiveElderly } = useAuthStore();
+  const { profile, relations, activeElderlyId, setActiveElderly, authSource } = useAuthStore();
   if (!profile) return null;
   const isElderly = profile.role === 'elderly';
+  // Access-code accounts are linked by the backend administrator, not from the phone.
+  const canManageLinks = authSource === 'firebase';
 
   const remove = (relationId: string, name: string) =>
     Alert.alert(
@@ -43,17 +45,17 @@ export default function CaregiverLinksScreen() {
           return (
             <Card key={r.relationId} tone={selected ? 'accent' : 'default'}>
               <Text style={type.heading}>{name}</Text>
-              <Text style={{ fontSize: 15, color: colors.textSubtle, marginTop: 4 }}>Linked {new Date(r.createdAt).toLocaleDateString()}</Text>
+              {r.createdAt ? <Text style={{ fontSize: 15, color: colors.textSubtle, marginTop: 4 }}>Linked {new Date(r.createdAt).toLocaleDateString()}</Text> : null}
               {selected ? <StatusBadge label="Shown on Home" tone="info" style={{ marginTop: spacing.sm }} /> : null}
               <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
                 {!isElderly && !selected ? <Button title="Show on Home" variant="secondary" onPress={() => setActiveElderly(r.elderlyId)} /> : null}
-                <Button title="Remove link" variant="outline" icon={<UserMinus size={20} color={colors.text} />} onPress={() => remove(r.relationId, name)} />
+                {canManageLinks ? <Button title="Remove link" variant="outline" icon={<UserMinus size={20} color={colors.text} />} onPress={() => remove(r.relationId, name)} /> : null}
               </View>
             </Card>
           );
         })
       )}
-      {isElderly ? <ShareCodePanel /> : <RedeemCodePanel />}
+      {canManageLinks ? isElderly ? <ShareCodePanel /> : <RedeemCodePanel /> : <Text style={type.body}>Links are set up by your SafeFall administrator.</Text>}
     </Screen>
   );
 }

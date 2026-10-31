@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "scheme": "safefall",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,13 +19,17 @@
         "NSLocationWhenInUseUsageDescription": "SafeFall AI attaches your location to a fall alert or SOS so your caregivers know where to find you.",
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "NSLocalNetworkUsageDescription": "SafeFall AI connects to your SafeFall watch on its own Wi-Fi network to read its sensors.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.safefall.ai",
       "permissions": [
@@ -70,6 +74,14 @@
         "expo-notifications",
         {
           "color": "#0D9488"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

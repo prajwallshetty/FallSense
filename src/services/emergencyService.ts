@@ -6,6 +6,7 @@ import { Effect, Incident, IncidentsState, Resolution } from '../emergency/incid
 import { setEffectHandler, useIncidentStore } from '../store/incidentStore';
 import { useActivityStore } from '../store/activityStore';
 import { bleService } from './bleService';
+import { cloudSyncService } from './cloudSyncService';
 import { locationService } from './locationService';
 import { notificationService } from './notificationService';
 import { syncService } from './syncService';
@@ -30,7 +31,9 @@ function handleEffects(effects: Effect[], state: IncidentsState) {
         break;
 
       case 'sync':
+        // Only the service started for this session does anything.
         syncService.kick();
+        cloudSyncService.kick();
         break;
 
       case 'escalate': {

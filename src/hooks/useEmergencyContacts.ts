@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { firebaseService } from '../services/firebase';
+import { contactsRepo } from '../services/contactsRepo';
 import { describeFirebaseError } from '../services/firebaseApp';
 import { EmergencyContact } from '../types';
 
@@ -28,7 +28,7 @@ export function useEmergencyContacts(elderlyId: string | null | undefined) {
         }
       })
       .catch(() => undefined);
-    const unsub = firebaseService.subscribeContacts(
+    const unsub = contactsRepo.subscribe(
       elderlyId,
       (c) => {
         live = true;

@@ -35,6 +35,15 @@ export function parseCountdownSeconds(raw: string | undefined): number {
 }
 
 export const env = {
+  /** SafeFall cloud API. Empty means this build has no backend: access-code sign-in is off. */
+  apiUrl: (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, ''),
+  /** Supabase Realtime speeds up caretaker updates. Polling still works without these. */
+  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  /** Local demo accounts on the sign-in screen. Never enable in a production build. */
+  demoModeEnabled: process.env.EXPO_PUBLIC_ENABLE_DEMO_MODE === 'true',
+  /** Older Firebase email sign-in. Off by default: Firebase Auth is not provisioned. */
+  legacyFirebaseAuth: process.env.EXPO_PUBLIC_ENABLE_FIREBASE_AUTH === 'true',
   firebase: firebaseConfig,
   isFirebaseConfigured: missingFirebaseKeys(firebaseConfig).length === 0,
   useFirebaseEmulator: process.env.EXPO_PUBLIC_FIREBASE_USE_EMULATOR === 'true',

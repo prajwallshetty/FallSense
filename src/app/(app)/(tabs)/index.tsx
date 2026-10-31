@@ -1,127 +1,145 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Users, Watch } from 'lucide-react-native';
+import { Users } from 'lucide-react-native';
 import { useAuthStore } from '../../../store/authStore';
 import { useIncidentStore } from '../../../store/incidentStore';
-import { useCaregiverStore } from '../../../store/caregiverStore';
+import { OverviewEntry, needsAttention, STATUS_STALE_MS, useCaretakerStore } from '../../../store/caretakerStore';
+import { useWatchStore } from '../../../store/watchStore';
 import { emergencyService } from '../../../services/emergencyService';
-import { useElderProfile } from '../../../hooks/useElderProfile';
 import { isOpen } from '../../../emergency/incidentMachine';
-import { LINK_STATUS, timeAgo } from '../../../emergency/labels';
+import { timeAgo } from '../../../emergency/labels';
+import { fromCloud, fromLocal } from '../../../emergency/history';
 import { Screen } from '../../../components/ui/Screen';
 import { Card } from '../../../components/ui/Card';
-import { Button } from '../../../components/ui/Button';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { EmptyState, ErrorBanner, LoadingState } from '../../../components/ui/Feedback';
-import { LiveStatusCard } from '../../../components/Dashboard/LiveStatusCard';
-import { DevToolsCard } from '../../../components/Dashboard/DevToolsCard';
-import { BatteryRing } from '../../../components/Dashboard/BatteryRing';
 import { SosButton } from '../../../components/Emergency/SosButton';
-import { IncidentRow } from '../../../components/Emergency/IncidentRow';
-import { CaregiverAlertCard } from '../../../components/Emergency/CaregiverAlertCard';
-import { ElderPicker } from '../../../components/Caregiver/ElderPicker';
+import { HistoryRow } from '../../../components/Emergency/HistoryRow';
+import { CloudRow, SafetyCard, WatchCard } from '../../../components/Watch/StatusRows';
 import { colors, spacing, type } from '../../../theme';
+import { CONNECTION_LABEL, DETECTION_LABEL, formatAxis } from '../../../watch/labels';
+import type { DetectionState } from '../../../detection/detectionEngine';
+import type { ConnectionState } from '../../../store/watchStore';
 
-function ElderlyDashboard() {
+function DemoNotice() {
+  const isDemo = useAuthStore((s) => s.isDemo);
+  if (!isDemo) return null;
+  return (
+    <Card tone="accent">
+      <StatusBadge label="DEMO MODE" tone="info" />
+      <Text style={[type.body, { marginTop: spacing.sm }]}>This is a local demonstration account, not a real sign-in.</Text>
+    </Card>
+  );
+}
+
+function UserHome() {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile)!;
   const active = useIncidentStore((s) => s.active);
   const last = useIncidentStore((s) => s.history[0]);
-  const [showMotion, setShowMotion] = useState(false);
+  const reading = useWatchStore((s) => s.lastReading);
+  const isStale = useWatchStore((s) => s.isStale);
 
   return (
-    <Screen title={`Hello, ${profile.fullName.split(' ')[0]}`} subtitle="SafeFall is watching over you." inTabs>
+    <Screen title={`Hello, ${profile.fullName.split(' ')[0]}`} inTabs>
+      <DemoNotice />
       {active && isOpen(active.state) ? (
         <Card tone="danger" onPress={() => router.push('/alert')} accessibilityLabel="Open the active alert">
           <Text style={type.heading}>An alert is open</Text>
           <Text style={type.body}>Tap to view it.</Text>
         </Card>
       ) : null}
+      <SafetyCard />
+      <WatchCard />
+      {reading ? (
+        <Card onPress={() => router.push('/(app)/(tabs)/monitor')} accessibilityLabel="Open live readings">
+          <Text style={type.label}>{isStale ? 'Last reading (not live)' : 'Latest reading'}</Text>
+          <Text style={[type.bodyStrong, { marginTop: spacing.xs, fontVariant: ['tabular-nums'] }]}>
+            X {formatAxis(reading.x)}   Y {formatAxis(reading.y)}   Z {formatAxis(reading.z)}
+          </Text>
+        </Card>
+      ) : null}
       <SosButton onConfirm={() => emergencyService.triggerManualSos({ uid: profile.userId, name: profile.fullName })} />
-      <LiveStatusCard showTelemetry={showMotion} />
-      <Button
-        title={showMotion ? 'Hide live motion' : 'Show live motion from watch'}
-        variant="ghost"
-        onPress={() => setShowMotion((v) => !v)}
-        style={{ marginTop: -spacing.sm, marginBottom: spacing.md }}
-      />
+      <CloudRow />
       {last ? (
         <>
           <Text style={[type.heading, { marginBottom: spacing.md }]}>Most recent alert</Text>
-          <IncidentRow incident={last} />
+          <HistoryRow item={fromLocal(last)} />
         </>
       ) : null}
-      <DevToolsCard />
     </Screen>
   );
 }
 
-function CaregiverDashboard() {
-  const router = useRouter();
-  const { profile, relations, relationsLoaded, activeElderlyId } = useAuthStore();
-  const { alertsByElder, devicesByElder, errors, loaded } = useCaregiverStore();
-  const elder = useElderProfile(activeElderlyId);
-  const relation = relations.find((r) => r.elderlyId === activeElderlyId);
+function PersonCard({ entry }: { entry: OverviewEntry }) {
+  const { user, status, recentIncidents } = entry;
+  const age = status ? Date.now() - Date.parse(status.updated_at) : null;
+  const reporting = age !== null && age <= STATUS_STALE_MS;
+  const connection = status ? CONNECTION_LABEL[status.watch_connection_status as ConnectionState] : null;
+  const safety = status ? DETECTION_LABEL[status.safety_state as DetectionState] : null;
+  const open = recentIncidents.filter(needsAttention);
 
-  if (!relationsLoaded) return <LoadingState label="Loading linked accounts…" />;
+  return (
+    <>
+      <Card>
+        <Text style={type.heading}>{user.name}</Text>
+        {user.relationship ? <Text style={{ fontSize: 15, color: colors.textSubtle, marginTop: 2 }}>{user.relationship}</Text> : null}
+        {!status ? (
+          <Text style={[type.body, { marginTop: spacing.sm }]}>This phone has not reported anything yet.</Text>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm }}>
+              {reporting && connection ? <StatusBadge label={connection.label} tone={connection.tone} /> : <StatusBadge label="Phone not reporting" tone="warning" />}
+              {reporting && safety ? <StatusBadge label={safety.label} tone={safety.tone} /> : null}
+            </View>
+            {!reporting ? (
+              <Text style={[type.body, { marginTop: spacing.sm }]}>Their phone last reported {timeAgo(Date.parse(status.updated_at))}. They may not be monitored right now.</Text>
+            ) : null}
+            <Text style={{ fontSize: 15, color: colors.textSubtle, marginTop: spacing.sm }}>Last report: {timeAgo(Date.parse(status.updated_at))}</Text>
+            <Text style={{ fontSize: 15, color: colors.textSubtle, marginTop: 2 }}>Last sensor sync: {status.last_sync ? timeAgo(Date.parse(status.last_sync)) : 'never'}</Text>
+            <Text style={[type.bodyStrong, { marginTop: spacing.sm, fontVariant: ['tabular-nums'] }]}>
+              X {formatAxis(status.latest_x)}   Y {formatAxis(status.latest_y)}   Z {formatAxis(status.latest_z)}
+            </Text>
+          </>
+        )}
+      </Card>
+      {open.map((i) => <HistoryRow key={i.id} item={fromCloud(i)} />)}
+      {recentIncidents.length > open.length ? <Text style={[type.heading, { marginBottom: spacing.md }]}>Recent incidents</Text> : null}
+      {recentIncidents.filter((i) => !needsAttention(i)).slice(0, 3).map((i) => <HistoryRow key={i.id} item={fromCloud(i)} />)}
+    </>
+  );
+}
 
-  if (relations.length === 0) {
+function CaretakerHome() {
+  const isDemo = useAuthStore((s) => s.isDemo);
+  const name = useAuthStore((s) => s.profile?.fullName ?? '');
+  const relations = useAuthStore((s) => s.relations);
+  const { overview, loaded, error, pushProblem, refresh, lastFetchedAt } = useCaretakerStore();
+
+  if (isDemo) {
     return (
-      <Screen title={`Hello, ${profile?.fullName.split(' ')[0] ?? ''}`} inTabs>
-        <EmptyState
-          icon={<Users size={48} color={colors.textSubtle} />}
-          title="You're not linked to anyone yet"
-          body="Ask the person you care for to create a caregiver code in their SafeFall app, then enter it here."
-          action={<Button title="Enter a caregiver code" onPress={() => router.push('/(app)/caregiver')} />}
-        />
+      <Screen title={`Hello, ${name.split(' ')[0]}`} inTabs>
+        <DemoNotice />
+        <Card>
+          <Text style={type.heading}>{relations[0]?.elderlyName}</Text>
+          <StatusBadge label="No live data in demo mode" tone="neutral" style={{ marginTop: spacing.sm }} />
+          <Text style={[type.body, { marginTop: spacing.sm }]}>Caretaker data comes from the cloud, which demo accounts do not use. Sign in with a caretaker access code to see a real person.</Text>
+        </Card>
       </Screen>
     );
   }
-
-  const id = activeElderlyId!;
-  const alerts = alertsByElder[id] ?? [];
-  const open = alerts.filter((a) => isOpen(a.state) && a.state !== 'possible_fall');
-  const device = devicesByElder[id]?.[0];
-  const deviceLink = device ? LINK_STATUS[device.linkStatus as keyof typeof LINK_STATUS] : null;
-  const staleCloud = device && Date.now() - device.updatedAt > 30 * 60 * 1000;
+  if (!loaded) return <LoadingState label="Loading…" />;
 
   return (
-    <Screen title={relation?.elderlyName ?? 'Overview'} subtitle="You receive this person's SafeFall alerts." inTabs>
-      <ElderPicker />
-      {errors[id] ? <ErrorBanner message={errors[id]} /> : null}
-      {!loaded[id] ? <LoadingState label="Loading alerts…" /> : null}
-
-      {open.length > 0 ? (
-        open.map((a) => <CaregiverAlertCard key={a.id} incident={a} elderPhone={elder?.phone} />)
-      ) : loaded[id] ? (
-        <Card tone="accent">
-          <StatusBadge label="No open alerts" tone="success" />
-          <Text style={[type.body, { marginTop: spacing.sm }]}>
-            {alerts[0] ? `Last alert ${timeAgo(alerts[0].createdAt)}.` : 'No alerts have been recorded.'}
-          </Text>
-        </Card>
-      ) : null}
-
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
-          <BatteryRing percentage={device && !staleCloud ? device.batteryPercent : null} size={96} />
-          <View style={{ flex: 1, gap: spacing.sm }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <Watch size={22} color={colors.textSubtle} />
-              <Text style={type.heading}>Their watch</Text>
-            </View>
-            {device && deviceLink ? (
-              <>
-                <StatusBadge label={staleCloud ? 'Status out of date' : deviceLink.label} tone={staleCloud ? 'warning' : deviceLink.tone} />
-                <Text style={{ fontSize: 15, color: colors.textSubtle }}>Reported by their phone {timeAgo(device.updatedAt)}</Text>
-              </>
-            ) : (
-              <Text style={type.body}>No watch status reported yet.</Text>
-            )}
-          </View>
-        </View>
-      </Card>
+    <Screen title={`Hello, ${name.split(' ')[0]}`} inTabs refreshing={false} onRefresh={refresh}>
+      {pushProblem ? <ErrorBanner message={`Alerts may not reach this phone. ${pushProblem}`} /> : null}
+      {error ? <ErrorBanner message={`Could not refresh: ${error}. Showing data from ${timeAgo(lastFetchedAt)}.`} onRetry={refresh} /> : null}
+      {overview.length === 0 ? (
+        <EmptyState icon={<Users size={48} color={colors.textSubtle} />} title="Nobody is linked yet" body="Ask your SafeFall administrator to link you to the person you care for." />
+      ) : (
+        overview.map((o) => <PersonCard key={o.user.id} entry={o} />)
+      )}
     </Screen>
   );
 }
@@ -129,5 +147,5 @@ function CaregiverDashboard() {
 export default function DashboardScreen() {
   const role = useAuthStore((s) => s.profile?.role);
   if (!role) return <LoadingState />;
-  return role === 'caregiver' ? <CaregiverDashboard /> : <ElderlyDashboard />;
+  return role === 'caregiver' ? <CaretakerHome /> : <UserHome />;
 }

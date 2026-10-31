@@ -3,7 +3,7 @@ import { Alert, Text, View } from 'react-native';
 import { ArrowUp, ArrowDown, Phone, MessageSquare, Pencil, Trash2 } from 'lucide-react-native';
 import { useAuthStore } from '../../../store/authStore';
 import { useEmergencyContacts } from '../../../hooks/useEmergencyContacts';
-import { firebaseService } from '../../../services/firebase';
+import { contactsRepo } from '../../../services/contactsRepo';
 import { describeFirebaseError } from '../../../services/firebaseApp';
 import { callNumber, textContacts } from '../../../services/contactActions';
 import { formatPhone } from '../../../utils/validation';
@@ -39,7 +39,7 @@ export default function ContactsScreen() {
     const target = index + delta;
     if (target < 0 || target >= ids.length) return;
     [ids[index], ids[target]] = [ids[target], ids[index]];
-    run(() => firebaseService.reorderContacts(uid, ids));
+    run(() => contactsRepo.reorder(uid, ids));
   };
 
   const remove = (c: EmergencyContact) =>
@@ -51,9 +51,9 @@ export default function ContactsScreen() {
         onPress: () =>
           run(async () => {
             if (!uid) return;
-            await firebaseService.deleteContact(uid, c.contactId);
+            await contactsRepo.remove(uid, c.contactId);
             const remaining = contacts.filter((x) => x.contactId !== c.contactId).map((x) => x.contactId);
-            if (remaining.length) await firebaseService.reorderContacts(uid, remaining);
+            if (remaining.length) await contactsRepo.reorder(uid, remaining);
           }),
       },
     ]);
@@ -76,7 +76,7 @@ export default function ContactsScreen() {
               onSubmit={(draft) =>
                 run(async () => {
                   if (!uid) return;
-                  await firebaseService.updateContact(uid, c.contactId, { ...draft, priority: c.priority });
+                  await contactsRepo.update(uid, c.contactId, { ...draft, priority: c.priority });
                   setEditing(null);
                 })
               }
@@ -110,7 +110,7 @@ export default function ContactsScreen() {
           <Text style={[type.heading, { marginBottom: spacing.lg }]}>Add a contact</Text>
           <ContactForm
             submitLabel="Add contact"
-            onSubmit={(draft) => run(async () => { if (uid) await firebaseService.addContact(uid, { ...draft, priority: contacts.length + 1 }); })}
+            onSubmit={(draft) => run(async () => { if (uid) await contactsRepo.add(uid, { ...draft, priority: contacts.length + 1 }); })}
           />
         </Card>
       ) : null}

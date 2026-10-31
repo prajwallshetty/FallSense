@@ -22,6 +22,24 @@ export type IncidentSource = 'wearable' | 'wearable_sos' | 'manual_sos';
 
 export type Resolution = 'false_alarm' | 'assisted' | 'other';
 
+/** What the wearer did. Recorded alongside the original event and never replaces it. */
+export type FinalUserResponse = 'im_ok' | 'requested_help' | 'no_response';
+
+/** Detection details for an incident raised by the phone from watch readings. */
+export interface DetectionSummary {
+  /** Heuristic evidence sum in 0..1. Not a probability and never shown as a percentage. */
+  score: number;
+  quality: 'good' | 'degraded' | 'poor';
+  movement: string;
+  trigger: string;
+  highRisk: boolean;
+  /** Firmware timestamp of the triggering reading (UTC seconds). */
+  watchEpoch: number | null;
+  peakDeviation: number;
+  orientationChangeDeg: number | null;
+  stillFraction: number | null;
+}
+
 export type LocationSnapshot =
   | { status: 'pending' }
   | {
@@ -81,6 +99,9 @@ export interface Incident {
   resolution: Resolution | null;
   dispatch: DispatchInfo | null;
   timeline: TimelineEntry[];
+  /** Present on incidents raised by phone-side detection from the Wi-Fi watch. */
+  detection?: DetectionSummary | null;
+  finalUserResponse?: FinalUserResponse | null;
   /** Incremented on every change; sync service uploads while version > syncedVersion. */
   version: number;
   syncedVersion: number;
@@ -127,6 +148,7 @@ export type Action =
       lateByMs?: number;
     }
   | { type: 'MANUAL_SOS'; now: number; owner: Owner; id: string }
+  | { type: 'DETECTION_FALL'; now: number; owner: Owner; id: string; detection: DetectionSummary; immediate: boolean }
   | { type: 'TICK'; now: number }
   | { type: 'CANCEL'; now: number; by: string }
   | { type: 'ESCALATE_NOW'; now: number; by: string }
@@ -414,7 +436,7 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
       if (active && isOpen(active.state)) {
         // An incident is already open: escalate it instead of creating a second one.
         if (active.state === 'possible_fall' || active.state === 'countdown') {
-          const inc = toEscalated(active, action.now, action.owner.uid, 'Manual SOS pressed');
+          const inc = { ...toEscalated(active, action.now, action.owner.uid, 'Manual SOS pressed'), finalUserResponse: 'requested_help' as const };
           return {
             state: place(state, inc),
             effects: [{ type: 'escalate', incidentId: inc.id }, { type: 'notify', incidentId: inc.id, kind: 'escalated' }, ...syncEffect(inc)],
@@ -433,13 +455,34 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
         simulated: false,
         peakAccelG: null,
       });
-      inc = addTimeline({ ...inc, escalatedAt: action.now }, { at: action.now, type: 'sos', by: action.owner.uid });
+      inc = addTimeline({ ...inc, escalatedAt: action.now, finalUserResponse: 'requested_help' }, { at: action.now, type: 'sos', by: action.owner.uid });
       return {
         state: place(state, inc),
         effects: [
           { type: 'capture_location', incidentId: inc.id },
           { type: 'escalate', incidentId: inc.id },
           { type: 'notify', incidentId: inc.id, kind: 'escalated' },
+          ...syncEffect(inc),
+        ],
+      };
+    }
+
+    case 'DETECTION_FALL': {
+      const { now, owner, id, detection, immediate } = action;
+      // An open incident is never replaced. Note the new event on it instead.
+      if (active && isOpen(active.state)) {
+        const noted = bump(active, now, {}, { at: now, type: 'detection_event_while_open', detail: `Score ${detection.score}, ${detection.trigger}` });
+        return { state: { ...state, active: noted }, effects: syncEffect(noted) };
+      }
+      const base = newIncident({ id, owner, source: 'wearable', state: 'possible_fall', now, deviceId: null, deviceEventId: null, simulated: false, peakAccelG: null });
+      let inc: Incident = addTimeline({ ...base, detection }, { at: now, type: 'possible_fall', by: 'phone_detection', detail: detection.trigger });
+      inc = immediate ? toEscalated(inc, now, 'detection', 'High-risk event: escalated immediately') : toCountdown(inc, now, cfg, 'Detected from watch readings');
+      return {
+        state: place(state, inc),
+        effects: [
+          { type: 'capture_location', incidentId: id },
+          ...(immediate ? [{ type: 'escalate', incidentId: id } as Effect] : []),
+          { type: 'notify', incidentId: id, kind: immediate ? 'escalated' : 'countdown' },
           ...syncEffect(inc),
         ],
       };
@@ -454,7 +497,7 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
       }
       if (active.state === 'countdown' && active.countdownEndsAt != null && now >= active.countdownEndsAt) {
         const late = now - active.countdownEndsAt > 5_000;
-        const inc = toEscalated(active, now, 'countdown', late ? 'Countdown expired while app was not running' : undefined);
+        const inc = { ...toEscalated(active, now, 'countdown', late ? 'Countdown expired while app was not running' : undefined), finalUserResponse: 'no_response' as const };
         return {
           state: place(state, inc),
           effects: [{ type: 'escalate', incidentId: inc.id }, { type: 'notify', incidentId: inc.id, kind: 'escalated' }, ...syncEffect(inc)],
@@ -465,7 +508,7 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
 
     case 'CANCEL': {
       if (!active || (active.state !== 'possible_fall' && active.state !== 'countdown')) return { state, effects: [] };
-      const inc = bump(active, action.now, { state: 'cancelled', cancelledBy: action.by, countdownEndsAt: null, possibleFallTimeoutAt: null }, {
+      const inc = bump(active, action.now, { state: 'cancelled', cancelledBy: action.by, finalUserResponse: 'im_ok', countdownEndsAt: null, possibleFallTimeoutAt: null }, {
         at: action.now,
         type: 'cancelled',
         by: action.by,
@@ -478,7 +521,7 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
 
     case 'ESCALATE_NOW': {
       if (!active || (active.state !== 'possible_fall' && active.state !== 'countdown')) return { state, effects: [] };
-      const inc = toEscalated(active, action.now, action.by, 'Escalated manually');
+      const inc = { ...toEscalated(active, action.now, action.by, 'Escalated manually'), finalUserResponse: 'requested_help' as const };
       return {
         state: place(state, inc),
         effects: [{ type: 'escalate', incidentId: inc.id }, { type: 'notify', incidentId: inc.id, kind: 'escalated' }, ...syncEffect(inc)],
@@ -502,6 +545,8 @@ export function reduce(state: IncidentsState, action: Action, cfg: MachineConfig
         resolvedBy: action.by,
         resolvedAt: action.now,
         resolution: action.resolution,
+        // "I'm OK" after a high-risk escalation: the wearer's answer, kept with the event.
+        ...(action.resolution === 'false_alarm' && action.by === active.elderlyId ? { finalUserResponse: 'im_ok' as const } : {}),
       }, { at: action.now, type: 'resolved', by: action.by, detail: action.resolution });
       return {
         state: place(state, inc),

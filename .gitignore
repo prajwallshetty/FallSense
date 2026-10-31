@@ -5,8 +5,8 @@ web-build/
 metro-cache/
 
 # Native build directories
-ios/
-android/
+/ios/
+/android/
 
 # Dependencies
 node_modules/
@@ -52,3 +52,9 @@ firestore-tests/node_modules/
 coverage/
 .firebaserc
 e2e/artifacts/
+
+# Local Expo module native build output and backend build output
+/modules/*/android/build/
+/modules/*/android/.gradle/
+/modules/*/android/.cxx/
+/backend/dist/

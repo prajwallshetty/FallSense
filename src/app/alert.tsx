@@ -12,6 +12,7 @@ import { useEmergencyContacts } from '../hooks/useEmergencyContacts';
 import { dispatchSummary, INCIDENT_STATE, sourceLabel } from '../emergency/labels';
 import { isOpen } from '../emergency/incidentMachine';
 import { env } from '../config/env';
+import { useCloudStore } from '../store/cloudStore';
 import { formatPhone } from '../utils/validation';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -29,6 +30,8 @@ export default function AlertScreen() {
   const insets = useSafeAreaInsets();
   const incident = useIncidentStore((s) => s.active);
   const profile = useAuthStore((s) => s.profile);
+  const isDemo = useAuthStore((s) => s.isDemo);
+  const cloudStatus = useCloudStore((s) => s.status);
   const { contacts } = useEmergencyContacts(profile?.userId);
   const [now, setNow] = useState(Date.now());
   const [actionResult, setActionResult] = useState<string | null>(null);
@@ -66,7 +69,11 @@ export default function AlertScreen() {
   const secondsLeft =
     incident.state === 'countdown' && incident.countdownEndsAt ? Math.max(0, Math.ceil((incident.countdownEndsAt - now) / 1000)) : null;
   const primary = contacts[0];
-  const dispatch = dispatchSummary(incident);
+  const dispatch = isDemo
+    ? { text: 'Demo mode: nobody was notified.', tone: 'info' as const }
+    : cloudStatus === 'offline' && incident.version > incident.syncedVersion
+      ? { text: 'No internet right now. This alert is saved and will be sent automatically when the phone is back online. Use the buttons below to reach someone directly.', tone: 'warning' as const }
+      : dispatchSummary(incident);
 
   const resolve = (resolution: 'false_alarm' | 'assisted') =>
     Alert.alert(
@@ -94,7 +101,7 @@ export default function AlertScreen() {
 
         <View style={styles.header} accessibilityLiveRegion="assertive">
           <ShieldAlert size={56} color={isEarly ? '#FCA5A5' : colors.danger} />
-          <Text style={styles.title} accessibilityRole="header">
+          <Text style={[styles.title, !isEarly ? { color: colors.text } : null]} accessibilityRole="header">
             {incident.state === 'possible_fall'
               ? 'Possible fall detected'
               : incident.state === 'countdown'
@@ -105,7 +112,7 @@ export default function AlertScreen() {
                     ? 'Getting you help'
                     : 'SOS sent'}
           </Text>
-          <Text style={styles.subtitle}>{sourceLabel(incident)} · {new Date(incident.createdAt).toLocaleTimeString()}</Text>
+          <Text style={[styles.subtitle, !isEarly ? { color: colors.textMuted } : null]}>{sourceLabel(incident)} · {new Date(incident.createdAt).toLocaleTimeString()}</Text>
           <StatusBadge label={st.label} tone={st.tone} style={{ alignSelf: 'center', marginTop: spacing.md }} />
         </View>
 
@@ -115,9 +122,9 @@ export default function AlertScreen() {
           </Text>
         ) : null}
         {secondsLeft != null ? (
-          <View style={styles.countdown} accessible accessibilityLabel={`Caregivers will be alerted in ${secondsLeft} seconds`}>
+          <View style={styles.countdown} accessible accessibilityLabel={`Your caretaker will be alerted in ${secondsLeft} seconds`}>
             <Text style={styles.countdownNumber}>{secondsLeft}</Text>
-            <Text style={styles.countdownLabel}>seconds until your caregivers are alerted</Text>
+            <Text style={styles.countdownLabel}>seconds until your caretaker is alerted</Text>
           </View>
         ) : null}
         {incident.state === 'possible_fall' ? (
@@ -127,19 +134,22 @@ export default function AlertScreen() {
         {isEarly ? (
           <View style={{ gap: spacing.md }}>
             <Button
-              title="I'm OK, cancel"
+              title="I'M OK"
               size="xl"
               icon={<CheckCircle2 size={28} color={colors.primaryText} />}
               onPress={() => emergencyService.cancel(uid)}
-              accessibilityHint="Cancels the alert. Nobody will be notified."
+              accessibilityHint="Closes the alert. It stays in your history and nobody is notified."
               testID="cancel-alert"
             />
-            <Button title="I need help now" size="xl" variant="danger" onPress={() => emergencyService.escalateNow(uid)} accessibilityHint="Alerts your caregivers immediately" />
+            <Button title="EMERGENCY HELP" size="xl" variant="danger" onPress={() => emergencyService.escalateNow(uid)} accessibilityHint="Alerts your caretaker immediately" testID="emergency-help" />
           </View>
         ) : (
           <>
+            {incident.state === 'escalated' && incident.finalUserResponse !== 'requested_help' ? (
+              <Button title="I'M OK" size="xl" onPress={() => resolve('false_alarm')} accessibilityHint="Tells your caretaker you are OK and closes the alert" testID="im-ok-escalated" style={{ marginBottom: spacing.lg }} />
+            ) : null}
             <View style={[styles.dispatch, { borderColor: dispatch.tone === 'danger' ? colors.danger : dispatch.tone === 'warning' ? colors.warning : colors.border }]}>
-              <Text style={type.bodyStrong}>Caregiver notification</Text>
+              <Text style={type.bodyStrong}>Caretaker notification</Text>
               <Text style={[type.body, { marginTop: 4 }]}>{dispatch.text}</Text>
             </View>
 
@@ -191,7 +201,6 @@ export default function AlertScreen() {
         {!isEarly ? (
           <View style={{ gap: spacing.md }}>
             <Button title="Help has arrived" variant="outline" size="lg" onPress={() => resolve('assisted')} />
-            <Button title="I'm OK now, close alert" variant="outline" size="lg" onPress={() => resolve('false_alarm')} />
           </View>
         ) : null}
         <Text style={styles.disclaimer}>SafeFall AI does not contact emergency services automatically.</Text>

@@ -6,14 +6,14 @@ import type { Incident, IncidentState, LocationSnapshot } from './incidentMachin
 export const INCIDENT_STATE: Record<IncidentState, { label: string; tone: Tone }> = {
   possible_fall: { label: 'Possible fall', tone: 'warning' },
   countdown: { label: 'Fall: counting down', tone: 'danger' },
-  escalated: { label: 'Alert sent: waiting for a caregiver', tone: 'danger' },
-  acknowledged: { label: 'Caregiver responding', tone: 'info' },
+  escalated: { label: 'Alert raised: waiting for a caretaker', tone: 'danger' },
+  acknowledged: { label: 'Caretaker responding', tone: 'info' },
   cancelled: { label: 'Cancelled', tone: 'neutral' },
   resolved: { label: 'Resolved', tone: 'success' },
 };
 
 export function sourceLabel(i: Pick<Incident, 'source'>): string {
-  return i.source === 'manual_sos' ? 'SOS from phone' : i.source === 'wearable_sos' ? 'SOS from watch' : 'Fall detected by watch';
+  return i.source === 'manual_sos' ? 'SOS from phone' : i.source === 'wearable_sos' ? 'SOS from watch' : 'Possible fall detected';
 }
 
 export const LINK_STATUS: Record<LinkStatus, { label: string; tone: Tone }> = {

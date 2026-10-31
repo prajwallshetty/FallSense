@@ -387,6 +387,7 @@ class BleService {
     const paired = pairedOverride ?? s.paired;
     const profile = useAuthStore.getState().profile;
     if (!paired || paired.isSimulated || !profile || profile.role !== 'elderly') return;
+    if (useAuthStore.getState().authSource !== 'firebase') return; // No Firestore session to write to.
     const linkStatus = statusOverride ?? s.linkStatus;
     const signature = `${linkStatus}|${s.batteryPercent == null ? '?' : Math.round(s.batteryPercent / 5)}|${s.firmwareVersion}`;
     const now = Date.now();
