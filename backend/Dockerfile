@@ -1,8 +1,7 @@
 # SafeFall API. Build:  docker build -t safefall-api backend
 # Run migrations once per release (release command):  npx tsx scripts/migrate.ts
 # Start:                                              node dist/server.js
-# Supabase's TLS certificate needs its CA: download prod-ca-2021.crt from Project Settings >
-# Database > SSL, mount it, and set NODE_EXTRA_CA_CERTS=/path/prod-ca-2021.crt
+# Supabase's public CA is bundled in certs/, so the database connection is verified TLS.
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -19,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY certs ./certs
 COPY scripts ./scripts
 COPY tsconfig.json ./
 COPY src ./src

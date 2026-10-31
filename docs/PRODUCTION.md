@@ -26,8 +26,12 @@ npm run migrate        # 0001 schema, 0002 row-level security, 0003 grant lockdo
 ```
 
 Use the **Session pooler** string: the direct `db.<ref>.supabase.co` host is IPv6-only on many plans.
-Supabase's certificate needs its CA: download `prod-ca-2021.crt` (Project Settings > Database > SSL), set
-`NODE_EXTRA_CA_CERTS=/path/to/prod-ca-2021.crt`, and use `?sslmode=verify-full` on the URL.
+
+The API refuses to connect to any non-local database without **verified TLS**. Supabase's public CA
+(`Supabase Root 2021 CA`, expires 2031) is bundled in `backend/certs/`, so nothing else is needed. Any
+`sslmode` in the URL is ignored so it cannot weaken this. Override with `DATABASE_CA` (PEM) or
+`DATABASE_CA_FILE` if Supabase rotates its CA. `backend/.env` is loaded automatically for local runs
+(migrate, admin, dev); on a host, set the same names as the platform's secrets.
 
 Migration 0003 revokes the privileges Supabase grants by default to `anon` and `authenticated`, so those
 roles can only read the six data tables through their RLS policies. All writes go through the API.
@@ -61,6 +65,8 @@ Docker: Node 22, `npm ci && npm run build`, start with `node dist/server.js`.
 - Health check: `GET /health` (works over plain HTTP, never touches the DB). Monitor `GET /ready` (DB reachable).
 - Release command: `npx tsx scripts/migrate.ts`.
 - **Run one instance.** Login rate limiting is in memory per process; more instances multiply the limit.
+- **Use an always-on instance, not a sleeping free tier.** A sleeping instance took over a minute to answer
+  its first request. A fall alert uploaded then would reach the caretaker minutes late.
 
 Verified locally with the compiled server: `/health` 200 and `/ready` 503 when the DB is down; plain HTTP
 to the API gets 426; a database outage returns a generic 500 and the process stays up; startup fails if a

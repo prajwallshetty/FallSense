@@ -1,12 +1,14 @@
 // Applies migrations/*.sql in order, once each. Never edits or removes applied migrations.
+import '../src/loadEnv';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
+import { poolOptions } from '../src/db';
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must be set');
-  const pool = new Pool({ connectionString: url });
+  const pool = new Pool(poolOptions(url));
   const dir = join(__dirname, '..', 'migrations');
   await pool.query('create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())');
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
