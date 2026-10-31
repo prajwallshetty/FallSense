@@ -5,6 +5,7 @@
 //   npm run admin -- issue-code user <userId>
 //   npm run admin -- revoke-code <credentialId>
 //   npm run admin -- purge-readings 90
+import '../src/loadEnv';
 import { createPgDb } from '../src/db';
 import { createCaretaker, createUser, issueAccessCode, linkCaretaker } from '../src/provisioning';
 

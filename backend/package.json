@@ -4,7 +4,7 @@
   "private": true,
   "description": "SafeFall AI cloud API: access-code auth, sensor sync, incidents, caretaker push.",
   "main": "dist/server.js",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=20.12" },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
