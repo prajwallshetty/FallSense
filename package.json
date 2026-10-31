@@ -17,7 +17,9 @@
     "verify": "npm run ts:check && npm run lint && npm run test:ci",
     "test:e2e:web": "node e2e/web-flow.e2e.js",
     "backend:test": "npm test --prefix backend",
-    "eval:detection": "npx --yes tsx scripts/evaluate-detection.ts"
+    "eval:detection": "npx --yes tsx scripts/evaluate-detection.ts",
+    "check:prod": "node scripts/check-prod-env.js --strict",
+    "eas-build-post-install": "node scripts/check-prod-env.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

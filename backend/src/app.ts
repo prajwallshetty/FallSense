@@ -118,13 +118,27 @@ export function createApp({ db, config, push, background }: AppDeps) {
     next();
   });
 
+  // Platform health checks call the container over plain HTTP, so liveness and readiness are exempt.
+  // They return nothing but a status.
+  const isProbe = (path: string) => path === '/health' || path === '/ready';
   app.use((req, _res, next) => {
-    if (config.requireHttps && !req.secure) next(new ApiError(426, 'https_required', 'This API only accepts HTTPS.'));
+    if (config.requireHttps && !req.secure && !isProbe(req.path)) next(new ApiError(426, 'https_required', 'This API only accepts HTTPS.'));
     else next();
   });
 
+  /** Liveness: the process is up. Deliberately does not touch the database. */
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
+  });
+
+  /** Readiness: the database answers. For monitoring, not for restart decisions. */
+  app.get('/ready', async (_req, res) => {
+    try {
+      await db.query('select 1');
+      res.json({ ok: true });
+    } catch {
+      res.status(503).json({ ok: false });
+    }
   });
 
   const requireAuth: RequestHandler = (req, _res, next) => {

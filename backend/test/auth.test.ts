@@ -136,8 +136,10 @@ describe('HTTPS enforcement', () => {
     const server = app.listen(0);
     await new Promise((r) => server.once('listening', r));
     const port = (server.address() as { port: number }).port;
-    assert.equal((await fetch(`http://127.0.0.1:${port}/health`)).status, 426);
-    assert.equal((await fetch(`http://127.0.0.1:${port}/health`, { headers: { 'x-forwarded-proto': 'https' } })).status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/v1/me`)).status, 426);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/v1/me`, { headers: { 'x-forwarded-proto': 'https' } })).status, 401, 'over HTTPS it reaches the auth check');
+    assert.equal((await fetch(`http://127.0.0.1:${port}/health`)).status, 200, 'health probes work over plain HTTP');
+    assert.equal((await fetch(`http://127.0.0.1:${port}/ready`)).status, 200);
     server.closeAllConnections();
     await new Promise((r) => server.close(r));
     await pg.close();
