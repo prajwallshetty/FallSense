@@ -1,62 +1,87 @@
-// Authentication & profile state. Two independent sources:
-//   - Firebase Auth (session persisted by the Firebase SDK in AsyncStorage) with a live
-//     Firestore subscription to the user's profile and relations;
-//   - local demo mode (src/services/demoAuth.ts), which needs no network or backend.
-// A restored demo session short-circuits Firebase entirely: no listener is attached, so a
-// Firebase auth error can never sign a demo user out or bounce them back to the login screen.
+// Authentication and profile state. One session source at a time:
+//   cloud     access code validated by the SafeFall backend (the normal path)
+//   demo      local demo accounts, only in builds that enable them (services/demoAuth.ts)
+//   firebase  older email accounts, off unless EXPO_PUBLIC_ENABLE_FIREBASE_AUTH=true
+//
+// Cloud and demo sessions never attach a Firebase listener, so a Firebase error can never sign
+// someone out. The rest of the app uses one role identifier, UserRole: the backend's
+// 'user' and 'caretaker' are mapped to it here, at the boundary, and nowhere else.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { env } from '../config/env';
+import { authService, CloudRole, CloudSession } from '../services/authService';
+import { ApiError } from '../services/apiClient';
+import { clearDemoSession, DEMO_RELATION, DemoAccount, findDemoAccount, loadDemoSession, saveDemoSession } from '../services/demoAuth';
 import { firebaseService } from '../services/firebase';
 import { describeFirebaseError } from '../services/firebaseApp';
-import {
-  clearDemoSession,
-  DEMO_RELATION,
-  DemoAccount,
-  findDemoAccount,
-  loadDemoSession,
-  saveDemoSession,
-} from '../services/demoAuth';
-import { CaregiverRelation, UserProfile } from '../types';
+import { CaregiverRelation, UserProfile, UserRole } from '../types';
 
-export type AuthStatus =
-  | 'initializing'
-  | 'config_error'
-  | 'signed_out'
-  | 'loading_profile'
-  | 'needs_profile'
-  | 'ready'
-  | 'error';
+export type AuthStatus = 'initializing' | 'signed_out' | 'loading_profile' | 'needs_profile' | 'ready' | 'error';
+
+export type AuthSource = 'cloud' | 'demo' | 'firebase';
 
 const ACTIVE_ELDER_KEY = 'safefall.activeElderlyId';
 const NEW_ACCOUNT_GRACE_MS = 8_000;
 
+const SIGNED_OUT = {
+  status: 'signed_out' as AuthStatus,
+  authSource: null,
+  uid: null,
+  email: null,
+  profile: null,
+  error: null,
+  relations: [],
+  relationsLoaded: false,
+  activeElderlyId: null,
+  isDemo: false,
+  calibrationAccess: false,
+};
+
 interface AuthStore {
   status: AuthStatus;
+  authSource: AuthSource | null;
   uid: string | null;
   email: string | null;
   profile: UserProfile | null;
   error: string | null;
   relations: CaregiverRelation[];
   relationsLoaded: boolean;
-  /** Caregivers: which linked elderly user the app is currently showing. */
+  /** Caregivers: which linked person the app is currently showing. */
   activeElderlyId: string | null;
-  /** True while a local demo account is signed in (no Firebase session behind it). */
   isDemo: boolean;
-  /** False when Firebase is unconfigured, so only demo sign-in can work. */
-  firebaseAvailable: boolean;
+  /** May open the detection configuration and calibration tools. */
+  calibrationAccess: boolean;
 
   initialize: () => () => void;
   setActiveElderly: (elderlyId: string | null) => void;
+  signInWithAccessCode: (code: string, role: CloudRole) => Promise<{ ok: true } | { ok: false; error: string }>;
   signInDemo: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-  signOutDemo: () => Promise<void>;
+  /** Clears cloud or demo credentials and returns to signed-out. */
+  signOutLocal: () => Promise<void>;
+}
+
+const CLOUD_ROLE: Record<CloudRole, UserRole> = { user: 'elderly', caretaker: 'caregiver' };
+
+function fromCloud(s: CloudSession): { profile: UserProfile; relations: CaregiverRelation[] } {
+  const { subject, links } = s;
+  const role = CLOUD_ROLE[subject.role];
+  return {
+    profile: { userId: subject.id, email: '', role, fullName: subject.name, phone: '', onboardingComplete: true, createdAt: 0 },
+    relations: links.map((l) => ({
+      relationId: l.id,
+      caregiverId: role === 'caregiver' ? subject.id : l.id,
+      elderlyId: role === 'caregiver' ? l.id : subject.id,
+      caregiverName: role === 'caregiver' ? subject.name : l.name,
+      elderlyName: role === 'caregiver' ? l.name : subject.name,
+      createdAt: 0,
+    })),
+  };
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => {
   let profileUnsub: (() => void) | null = null;
   let relationsUnsub: (() => void) | null = null;
-  // Hoisted so signInDemo can detach the Firebase auth listener when switching to demo mode.
   let authUnsub: (() => void) | null = null;
 
   const stopSubs = () => {
@@ -71,12 +96,13 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     stopSubs();
   };
 
-  /** Puts a demo account into state. Deliberately touches no Firestore subscription. */
   const applyDemo = (account: DemoAccount) => {
     const { profile } = account;
     set({
       status: 'ready',
+      authSource: 'demo',
       isDemo: true,
+      calibrationAccess: env.devToolsEnabled,
       uid: profile.userId,
       email: profile.email,
       profile,
@@ -85,6 +111,32 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       relationsLoaded: true,
       activeElderlyId: profile.role === 'caregiver' ? DEMO_RELATION.elderlyId : null,
     });
+  };
+
+  const applyCloud = (session: CloudSession) => {
+    const { profile, relations } = fromCloud(session);
+    set({
+      status: 'ready',
+      authSource: 'cloud',
+      isDemo: false,
+      calibrationAccess: session.subject.calibrationAccess,
+      uid: profile.userId,
+      email: null,
+      profile,
+      error: null,
+      relations,
+      relationsLoaded: true,
+      activeElderlyId: profile.role === 'caregiver' ? relations[0]?.elderlyId ?? null : null,
+    });
+  };
+
+  const refreshCloudProfile = () => {
+    authService
+      .refreshProfile()
+      .then((session) => {
+        if (session && get().authSource === 'cloud') applyCloud(session);
+      })
+      .catch(() => undefined); // Offline is normal here. The cached session stands.
   };
 
   const watchRelations = (profile: UserProfile) => {
@@ -105,22 +157,19 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     );
   };
 
-  /** Attaches the Firebase auth listener. Never called while a demo session is active. */
   const attachFirebase = () => {
     authUnsub?.();
     authUnsub = firebaseService.onAuthChanged((user) => {
-      // A demo sign-in may have landed between the callback being queued and running.
-      if (get().isDemo) return;
+      if (get().authSource === 'demo' || get().authSource === 'cloud') return;
       stopSubs();
       if (!user) {
-        set({ status: 'signed_out', uid: null, email: null, profile: null, relations: [], relationsLoaded: false, activeElderlyId: null, error: null });
+        set({ ...SIGNED_OUT });
         return;
       }
-      set({ status: 'loading_profile', uid: user.uid, email: user.email, error: null });
+      set({ status: 'loading_profile', authSource: 'firebase', uid: user.uid, email: user.email, error: null });
       profileUnsub = firebaseService.subscribeProfile(
         user.uid,
         (profile) => {
-          if (get().isDemo) return;
           if (!profile) {
             // Right after sign-up the profile document is still being written: give it a
             // moment before asking the user to complete their profile.
@@ -128,7 +177,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
             if (age >= 0 && age < NEW_ACCOUNT_GRACE_MS) {
               set({ status: 'loading_profile', profile: null });
               setTimeout(() => {
-                if (!get().isDemo && get().uid === user.uid && !get().profile) set({ status: 'needs_profile' });
+                if (get().uid === user.uid && !get().profile) set({ status: 'needs_profile' });
               }, NEW_ACCOUNT_GRACE_MS - age);
               return;
             }
@@ -140,7 +189,6 @@ export const useAuthStore = create<AuthStore>((set, get) => {
           if (!relationsUnsub || prevRole !== profile.role) watchRelations(profile);
         },
         (e) => {
-          if (get().isDemo) return;
           // Offline on a cold start with no cached profile, or rules misconfigured.
           set({ status: 'error', error: describeFirebaseError(e) });
         },
@@ -148,8 +196,19 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     });
   };
 
+  const attachFallback = () => {
+    if (env.legacyFirebaseAuth && env.isFirebaseConfigured) attachFirebase();
+    else set({ ...SIGNED_OUT });
+  };
+
+  authService.setExpiredHandler(() => {
+    // The backend refused this session for good, for example a revoked access code.
+    if (get().authSource === 'cloud') set({ ...SIGNED_OUT, error: 'Your access code is no longer valid. Ask your administrator for a new one.' });
+  });
+
   return {
     status: 'initializing',
+    authSource: null,
     uid: null,
     email: null,
     profile: null,
@@ -158,27 +217,28 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     relationsLoaded: false,
     activeElderlyId: null,
     isDemo: false,
-    firebaseAvailable: env.isFirebaseConfigured,
+    calibrationAccess: false,
 
     initialize: () => {
       let cancelled = false;
 
-      // Resolve the stored demo session first and only then decide whether to attach the
-      // Firebase listener. Doing both concurrently would race: Firebase reports "no user"
-      // on a cold start and would briefly sign a restored demo user out.
+      // Resolve stored sessions first. Attaching Firebase at the same time would race: it reports
+      // "no user" on a cold start and would briefly sign a restored session out.
       void (async () => {
-        const demo = await loadDemoSession();
+        const demo = env.demoModeEnabled ? await loadDemoSession() : null;
         if (cancelled) return;
         if (demo) {
           applyDemo(demo);
           return;
         }
-        if (!env.isFirebaseConfigured) {
-          // Not a hard wall: the login screen stays reachable so demo mode can be used.
-          set({ status: 'signed_out', firebaseAvailable: false });
+        const session = await authService.restore();
+        if (cancelled) return;
+        if (session) {
+          applyCloud(session);
+          refreshCloudProfile();
           return;
         }
-        attachFirebase();
+        attachFallback();
       })();
 
       return () => {
@@ -193,32 +253,37 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       else AsyncStorage.removeItem(ACTIVE_ELDER_KEY).catch(() => undefined);
     },
 
+    signInWithAccessCode: async (code, role) => {
+      try {
+        const session = await authService.login(code, role);
+        stopFirebase();
+        applyCloud(session);
+        return { ok: true as const };
+      } catch (e) {
+        const err = e as ApiError;
+        if (err.kind === 'network' || err.kind === 'timeout') {
+          return { ok: false as const, error: 'Could not reach SafeFall. If you are connected to the watch Wi-Fi, switch to mobile data or home Wi-Fi to sign in.' };
+        }
+        return { ok: false as const, error: err.message };
+      }
+    },
+
     signInDemo: async (email, password) => {
+      if (!env.demoModeEnabled) return { ok: false as const, error: 'Demo mode is not available in this build.' };
       const account = findDemoAccount(email, password);
       if (!account) return { ok: false as const, error: 'Those demo credentials are not correct.' };
-      // Detach Firebase before switching, so its "no user" callback cannot sign the demo
-      // user straight back out.
       stopFirebase();
       await saveDemoSession(account.profile.userId);
       applyDemo(account);
       return { ok: true as const };
     },
 
-    signOutDemo: async () => {
-      await clearDemoSession();
-      set({
-        status: 'signed_out',
-        isDemo: false,
-        uid: null,
-        email: null,
-        profile: null,
-        error: null,
-        relations: [],
-        relationsLoaded: false,
-        activeElderlyId: null,
-      });
-      // Restore real auth so a Firebase account can still sign in after the demo.
-      if (env.isFirebaseConfigured) attachFirebase();
+    signOutLocal: async () => {
+      const source = get().authSource;
+      if (source === 'demo') await clearDemoSession();
+      if (source === 'cloud') await authService.logout();
+      set({ ...SIGNED_OUT });
+      attachFallback();
     },
   };
 });

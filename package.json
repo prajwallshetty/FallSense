@@ -15,12 +15,18 @@
     "test": "jest",
     "test:ci": "jest --ci --runInBand",
     "verify": "npm run ts:check && npm run lint && npm run test:ci",
-    "test:e2e:web": "node e2e/web-flow.e2e.js"
+    "test:e2e:web": "node e2e/web-flow.e2e.js",
+    "backend:test": "npm test --prefix backend",
+    "eval:detection": "npx --yes tsx scripts/evaluate-detection.ts",
+    "check:prod": "node scripts/check-prod-env.js --strict",
+    "eas-build-post-install": "node scripts/check-prod-env.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
+    "@supabase/supabase-js": "^2.118.0",
     "expo": "~54.0.0",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.9",
     "expo-dev-client": "~6.0.21",
@@ -70,10 +76,11 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/functions/",
-      "/firestore-tests/"
+      "/firestore-tests/",
+      "/backend/"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|firebase|@firebase/.*|lucide-react-native)"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|firebase|@firebase/.*|lucide-react-native|@supabase/.*)"
     ]
   },
   "private": true

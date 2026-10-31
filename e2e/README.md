@@ -24,3 +24,14 @@ npx playwright-core install chromium   # first time only (or set CHROMIUM_PATH)
 npm run test:e2e:web
 ```
 Screenshots are written to `e2e/artifacts/`.
+
+## Full system flow (Wi-Fi watch, cloud, caretaker)
+
+`full-flow.e2e.js` drives the real app on Expo web against the real API on an in-memory Postgres, with
+`mock-watch.js` standing in for the watch. It cannot prove real watch behaviour, Android Wi-Fi routing, the
+foreground service, FCM delivery or Supabase Realtime. Start, in separate shells:
+
+    node e2e/mock-watch.js 9100
+    cd backend && CORS_ORIGINS=http://127.0.0.1:8095 PORT=8787 npx tsx scripts/e2e-server.ts codes.json
+    EXPO_PUBLIC_API_URL=http://127.0.0.1:8787 EXPO_PUBLIC_FALL_COUNTDOWN_SECONDS=10 npx expo start --web --port 8095
+    CHROMIUM_PATH=<chrome> APP_URL=http://127.0.0.1:8095 CODES_FILE=codes.json node e2e/full-flow.e2e.js
